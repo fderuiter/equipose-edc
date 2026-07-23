@@ -17,6 +17,15 @@ public class MappingDataRequest {
     @JsonProperty("item_value")
     private String itemValue;
 
+    @JsonProperty("target_study")
+    private String targetStudy;
+
+    @JsonProperty("target_form_version")
+    private String targetFormVersion;
+
+    @JsonProperty("target_field")
+    private String targetField;
+
     public String getSubjectId() {
         return subjectId;
     }
@@ -39,5 +48,29 @@ public class MappingDataRequest {
 
     public void setItemValue(String itemValue) {
         this.itemValue = itemValue;
+    }
+
+    public String getTargetStudy() {
+        return targetStudy;
+    }
+
+    public void setTargetStudy(String targetStudy) {
+        this.targetStudy = targetStudy;
+    }
+
+    public String getTargetFormVersion() {
+        return targetFormVersion;
+    }
+
+    public void setTargetFormVersion(String targetFormVersion) {
+        this.targetFormVersion = targetFormVersion;
+    }
+
+    public String getTargetField() {
+        return targetField;
+    }
+
+    public void setTargetField(String targetField) {
+        this.targetField = targetField;
     }
 }

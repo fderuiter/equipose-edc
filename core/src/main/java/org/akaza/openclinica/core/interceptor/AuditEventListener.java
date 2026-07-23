@@ -87,6 +87,15 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
 
         try {
             AuditLogEvent auditEvent = new AuditLogEvent();
+            try {
+                Object result = session.createNativeQuery("SELECT nextval('audit_log_event_audit_id_seq')").getSingleResult();
+                if (result != null) {
+                    auditEvent.setAuditId(((Number) result).intValue());
+                }
+            } catch (Exception e) {
+                System.out.println("MANUAL SEQ FETCH FAILED: " + e.getMessage());
+                e.printStackTrace();
+            }
             auditEvent.setAuditDate(new Date());
             auditEvent.setAuditTable(auditTable);
             auditEvent.setEntityId(entityId);

@@ -94,9 +94,23 @@ public class InteropController {
 
     @PostMapping("/mapping/data")
     public ResponseEntity<ApiResponse<String>> saveMapping(@jakarta.validation.Valid @RequestBody org.akaza.openclinica.modern.dto.MappingDataRequest newMappings) {
+        try {
+            interopService.validateTargetIdentifiers(
+                newMappings.getTargetStudy(),
+                newMappings.getTargetFormVersion(),
+                newMappings.getTargetField()
+            );
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse<>(e.getMessage()));
+        }
+
         mappings.put("subject_id", newMappings.getSubjectId());
         mappings.put("event_id", newMappings.getEventId());
         mappings.put("item_value", newMappings.getItemValue());
+        mappings.put("target_study", newMappings.getTargetStudy() != null ? newMappings.getTargetStudy() : "");
+        mappings.put("target_form_version", newMappings.getTargetFormVersion() != null ? newMappings.getTargetFormVersion() : "");
+        mappings.put("target_field", newMappings.getTargetField() != null ? newMappings.getTargetField() : "");
+
         try {
             String json = objectMapper.writeValueAsString(mappings);
             draftService.saveDraftWithId(MAPPINGS_ID, "system", MAPPINGS_DRAFT_TYPE, json);
@@ -108,8 +122,8 @@ public class InteropController {
     }
     
     @GetMapping("/pipeline/review")
-    public ResponseEntity<ApiResponse<List<String>>> pipelineReview() {
-        return ResponseEntity.ok(new ApiResponse<>(interopService.getReviewQueue()));
+    public ResponseEntity<ApiResponse<List<org.akaza.openclinica.modern.dto.StagedRecordDto>>> pipelineReview() {
+        return ResponseEntity.ok(new ApiResponse<>(interopService.getReviewQueueWithMetadata()));
     }
 
     @PostMapping("/pipeline/commit")

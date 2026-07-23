@@ -209,10 +209,18 @@ public class InteropService {
             final String fEventId = eventId;
             final String fValue = value;
 
+            String targetStudy = mappings.get("target_study");
+            String targetFormVersion = mappings.get("target_form_version");
+            String targetField = mappings.get("target_field");
+
+            final String fTargetStudy = targetStudy;
+            final String fTargetFormVersion = targetFormVersion;
+            final String fTargetField = targetField;
+
             workflowService.executeWorkflowTransaction(1L, payloadObj, new WorkflowTransactionCallback<Void>() {
                 @Override
                 public Void doInTransaction() {
-                    processClinicalRecord(fSubjectId, fEventId, fValue);
+                    processClinicalRecord(fSubjectId, fEventId, fValue, fTargetStudy, fTargetFormVersion, fTargetField);
                     return null;
                 }
             });
@@ -309,10 +317,14 @@ public class InteropService {
                             protected void doInTransactionWithoutResult(TransactionStatus status) {
                                 org.akaza.openclinica.model.ClinicalPayload payloadObj = new org.akaza.openclinica.model.ClinicalPayload(br.subjectId, br.eventId, br.value);
 
+                                String targetStudy = mappings.get("target_study");
+                                String targetFormVersion = mappings.get("target_form_version");
+                                String targetField = mappings.get("target_field");
+
                                 workflowService.executeWorkflowTransaction(1L, payloadObj, new WorkflowTransactionCallback<Void>() {
                                     @Override
                                     public Void doInTransaction() {
-                                        processClinicalRecord(br.subjectId, br.eventId, br.value);
+                                        processClinicalRecord(br.subjectId, br.eventId, br.value, targetStudy, targetFormVersion, targetField);
                                         return null;
                                     }
                                 });
@@ -338,7 +350,7 @@ public class InteropService {
         }
     }
 
-    private void processClinicalRecord(String fSubjectId, String fEventId, String fValue) {
+    private void processClinicalRecord(String fSubjectId, String fEventId, String fValue, String targetStudyId, String targetFormVersionId, String targetFieldId) {
         StudySubject ss = null;
         try {
             ss = entityManager.createQuery("SELECT ss FROM StudySubject ss WHERE ss.ocOid = :id OR ss.label = :id", StudySubject.class)
@@ -353,10 +365,13 @@ public class InteropService {
             ss = new StudySubject();
             ss.setLabel(fSubjectId);
             ss.setOcOid(fSubjectId);
-            Study study = entityManager.find(Study.class, 1);
+            Study study = findStudy(targetStudyId);
+            if (study == null) {
+                study = entityManager.find(Study.class, 1);
+            }
             ss.setStudy(study);
             ss.setSubject(subject);
-            Status stat = entityManager.find(Status.class, 1);
+            Status stat = Status.getByCode(1);
             ss.setStatus(stat);
             ss.setDateCreated(new java.util.Date());
             UserAccount owner = entityManager.find(UserAccount.class, 1);
@@ -389,7 +404,10 @@ public class InteropService {
         ec.setStatusId(1);
         ec.setDateCreated(new java.util.Date());
         ec.setUserAccount(owner);
-        CrfVersion cv = entityManager.find(CrfVersion.class, 1);
+        CrfVersion cv = findCrfVersion(targetFormVersionId);
+        if (cv == null) {
+            cv = entityManager.find(CrfVersion.class, 1);
+        }
         ec.setCrfVersion(cv);
         CompletionStatus cs = entityManager.find(CompletionStatus.class, 1);
         ec.setCompletionStatus(cs);
@@ -398,14 +416,136 @@ public class InteropService {
 
         ItemData idata = new ItemData();
         idata.setEventCrf(ec);
-        Item item = entityManager.find(Item.class, 1);
+        Item item = findItem(targetFieldId);
+        if (item == null) {
+            item = entityManager.find(Item.class, 1);
+        }
         idata.setItem(item);
-        Status stat = entityManager.find(Status.class, 1);
+        Status stat = Status.getByCode(1);
         idata.setStatus(stat);
         idata.setValue(fValue);
         idata.setUserAccount(owner);
         idata.setDateCreated(new java.util.Date());
         entityManager.persist(idata);
+    }
+
+    @Transactional(readOnly = true)
+    public Study findStudy(String id) {
+        if (id == null || id.trim().isEmpty()) {
+            return entityManager.find(Study.class, 1);
+        }
+        try {
+            if (id.trim().matches("\\d+")) {
+                Study study = entityManager.find(Study.class, Integer.parseInt(id.trim()));
+                if (study != null) return study;
+            }
+        } catch (Exception e) {}
+        try {
+            return entityManager.createQuery("SELECT s FROM Study s WHERE s.oc_oid = :id OR s.name = :id", Study.class)
+                    .setParameter("id", id.trim())
+                    .setMaxResults(1)
+                    .getSingleResult();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public CrfVersion findCrfVersion(String id) {
+        if (id == null || id.trim().isEmpty()) {
+            return entityManager.find(CrfVersion.class, 1);
+        }
+        try {
+            if (id.trim().matches("\\d+")) {
+                CrfVersion cv = entityManager.find(CrfVersion.class, Integer.parseInt(id.trim()));
+                if (cv != null) return cv;
+            }
+        } catch (Exception e) {}
+        try {
+            return entityManager.createQuery("SELECT cv FROM CrfVersion cv WHERE cv.ocOid = :id OR cv.name = :id", CrfVersion.class)
+                    .setParameter("id", id.trim())
+                    .setMaxResults(1)
+                    .getSingleResult();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Item findItem(String id) {
+        if (id == null || id.trim().isEmpty()) {
+            return entityManager.find(Item.class, 1);
+        }
+        try {
+            if (id.trim().matches("\\d+")) {
+                Item item = entityManager.find(Item.class, Integer.parseInt(id.trim()));
+                if (item != null) return item;
+            }
+        } catch (Exception e) {}
+        try {
+            return entityManager.createQuery("SELECT i FROM Item i WHERE i.ocOid = :id OR i.name = :id", Item.class)
+                    .setParameter("id", id.trim())
+                    .setMaxResults(1)
+                    .getSingleResult();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public void validateTargetIdentifiers(String studyId, String formVersionId, String fieldId) {
+        if (studyId != null && !studyId.trim().isEmpty()) {
+            if (findStudy(studyId) == null) {
+                throw new IllegalArgumentException("Target Study identifier '" + studyId + "' does not exist in the database.");
+            }
+        }
+        if (formVersionId != null && !formVersionId.trim().isEmpty()) {
+            if (findCrfVersion(formVersionId) == null) {
+                throw new IllegalArgumentException("Target Form Version identifier '" + formVersionId + "' does not exist in the database.");
+            }
+        }
+        if (fieldId != null && !fieldId.trim().isEmpty()) {
+            if (findItem(fieldId) == null) {
+                throw new IllegalArgumentException("Target Field identifier '" + fieldId + "' does not exist in the database.");
+            }
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<org.akaza.openclinica.modern.dto.StagedRecordDto> getReviewQueueWithMetadata() {
+        List<org.akaza.openclinica.modern.dto.StagedRecordDto> result = new ArrayList<>();
+        
+        String targetStudyIdentifier = "";
+        String targetFormVersionIdentifier = "";
+        try {
+            ConfigurationDraft mappingDraft = draftService.getDraft(MAPPINGS_ID);
+            if (mappingDraft != null && mappingDraft.getDraftData() != null) {
+                Map<String, String> mappings = objectMapper.readValue(mappingDraft.getDraftData(), new TypeReference<Map<String, String>>() {});
+                targetStudyIdentifier = mappings.getOrDefault("target_study", "");
+                targetFormVersionIdentifier = mappings.getOrDefault("target_form_version", "");
+            }
+        } catch (Exception e) {
+            log.error("Failed to load mappings for review queue metadata", e);
+        }
+
+        // Get actual study name
+        String studyName = "Unknown";
+        Study study = findStudy(targetStudyIdentifier);
+        if (study != null) {
+            studyName = study.getName() != null ? study.getName() : study.getOc_oid();
+        }
+
+        // Get actual crf version name
+        String formVersionName = "Unknown";
+        CrfVersion cv = findCrfVersion(targetFormVersionIdentifier);
+        if (cv != null) {
+            formVersionName = cv.getName() != null ? cv.getName() : cv.getOcOid();
+        }
+
+        for (String recordId : recordsInStaging.keySet()) {
+            result.add(new org.akaza.openclinica.modern.dto.StagedRecordDto(recordId, studyName, formVersionName));
+        }
+        return result;
     }
 
     private String extractJson(JsonNode rootNode, String jsonPointer) {

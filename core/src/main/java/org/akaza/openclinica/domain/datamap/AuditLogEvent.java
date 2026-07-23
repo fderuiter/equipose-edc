@@ -6,6 +6,7 @@ import java.util.Date;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -33,7 +34,7 @@ public class AuditLogEvent extends DataMapDomainObject implements Serializable{
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private int auditId;
+	private Integer auditId;
 	private Date auditDate;
 	private String auditTable;
 	private Integer userId;
@@ -55,13 +56,13 @@ public class AuditLogEvent extends DataMapDomainObject implements Serializable{
 	public AuditLogEvent() {
 	}
 
-	public AuditLogEvent(int auditId, Date auditDate, String auditTable) {
+	public AuditLogEvent(Integer auditId, Date auditDate, String auditTable) {
 		this.auditId = auditId;
 		this.auditDate = auditDate;
 		this.auditTable = auditTable;
 	}
 
-	public AuditLogEvent(int auditId, Date auditDate, String auditTable,
+	public AuditLogEvent(Integer auditId, Date auditDate, String auditTable,
 			Integer userId, Integer entityId, String entityName,
 			String reasonForChange, /*Integer auditLogEventTypeId,*/
 			String oldValue, String newValue, Integer eventCrfId,
@@ -82,12 +83,13 @@ public class AuditLogEvent extends DataMapDomainObject implements Serializable{
 	}
 
 	@Id
+	@GeneratedValue(generator = "id-generator")
 	@Column(name = "audit_id", unique = true, nullable = false)
-	public int getAuditId() {
+	public Integer getAuditId() {
 		return this.auditId;
 	}
 
-	public void setAuditId(int auditId) {
+	public void setAuditId(Integer auditId) {
 		this.auditId = auditId;
 	}
 
