@@ -65,7 +65,8 @@ export default [
                 '**/jquery-*.js',
                 '**/jquery.*.js',
               ],
-              message: 'Use of legacy calendar assets or unapproved jQuery variants is restricted.',
+              message:
+                'Use of legacy calendar assets or unapproved jQuery variants is restricted.',
             },
           ],
         },

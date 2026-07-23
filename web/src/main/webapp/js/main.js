@@ -13,8 +13,10 @@ import { store } from './store.js';
 
 import 'json3';
 import './vendor/jmesa/index.js';
+// eslint-disable-next-line no-restricted-imports
 import './vendor/new_cal/index.js';
 import './vendor/wz_tooltip/wz_tooltip.js';
+// eslint-disable-next-line no-restricted-imports
 import './vendor/calendarpopup/CalendarPopup.js';
 
 // Initialize modern React UI (dynamically imported below)
