@@ -19,7 +19,9 @@ test.describe('Printable CRF', () => {
     try {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       mainScript = manifest['src/main/webapp/js/main.js'].file;
-    } catch (e) {}
+    } catch {
+      // Fallback if manifest is missing
+    }
 
     await page.route('**/clinicaldata/html/print/**', async (route) => {
       const mockHtml = `
@@ -73,7 +75,7 @@ test.describe('Printable CRF', () => {
       try {
         const bundle = fs.readFileSync(path.join(assetsDir, fileName), 'utf8');
         route.fulfill({ contentType: 'application/javascript', body: bundle });
-      } catch (e) {
+      } catch {
         route.abort();
       }
     });

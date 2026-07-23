@@ -52,6 +52,24 @@ export default [
       'no-undef': 'off',
       'no-empty': 'off',
       'no-useless-escape': 'off',
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/new_cal/**',
+                '**/calendarpopup/**',
+                '**/*calendar*',
+                '**/jquery.js',
+                '**/jquery-*.js',
+                '**/jquery.*.js',
+              ],
+              message: 'Use of legacy calendar assets or unapproved jQuery variants is restricted.',
+            },
+          ],
+        },
+      ],
     },
     settings: {
       react: {

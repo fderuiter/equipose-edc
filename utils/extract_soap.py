@@ -3,6 +3,9 @@ import glob
 
 def generate_soap_docs():
     schema_dir = 'ws/src/main/webapp/WEB-INF/schemas/'
+    if not os.path.exists(schema_dir):
+        print(f"Warning: SOAP schema directory '{schema_dir}' does not exist. Skipping SOAP doc generation.")
+        return
     schema_files = glob.glob(os.path.join(schema_dir, '*.xsd'))
     
     docs_dir = 'docs/reference'

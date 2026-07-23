@@ -96,7 +96,7 @@ cp README.md docs/explanation/project-info.md
 CURRENT_DATE=$(date +"%Y-%m-%d")
 
 # Update module-level README files with the synchronized project version
-for f in core/README.md ws/README.md web/README.md; do
+for f in core/README.md web/README.md; do
   if [ -f "$f" ]; then
     sed -i "s/\*\*OpenClinica Version:\*\* .*/\*\*OpenClinica Version:\*\* $PROJECT_VERSION/g" "$f"
     sed -i "s/\*\*Updated:\*\* .*/\*\*Updated:\*\* $CURRENT_DATE/g" "$f"
@@ -227,7 +227,7 @@ if ! python3 -m mkdocs build; then
 fi
 
 # Validate that no placeholders remain in documentation and final outputs
-UNRESOLVED=$(find docs core ws web site -type f \( -name "*.md" -o -name "*.html" \) -not -path "*/node_modules/*" -exec grep -lE '\$\{[a-zA-Z0-9._]+\}' {} + || true)
+UNRESOLVED=$(find docs core web site -type f \( -name "*.md" -o -name "*.html" \) -not -path "*/node_modules/*" -exec grep -lE '\$\{[a-zA-Z0-9._]+\}' {} + || true)
 if [ ! -z "$UNRESOLVED" ]; then
     echo "Error: Unreplaced placeholders found in the following files:"
     echo "$UNRESOLVED"
