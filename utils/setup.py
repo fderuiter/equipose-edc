@@ -223,8 +223,11 @@ def main():
             if not verify_connection(l_host, l_port, "LDAP"):
                 print(f"Warning: Failed to connect to LDAP at {l_host}:{l_port}. Proceeding anyway.")
 
-    app_root = os.path.dirname(os.path.abspath(__file__))
-    default_data_path = os.path.join(app_root, "data")
+    # Resolve the project root dynamically using the script's physical location as the reference point
+    project_root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    
+    # Initialize default data directories relative to the resolved project root instead of utility subfolders
+    default_data_path = os.path.join(project_root, "data")
     host_file_path = get_input(f"File Path for data (default: {default_data_path}): ", default_data_path, "HOST_FILE_PATH")
     env_vars["HOST_FILE_PATH"] = os.path.abspath(host_file_path).replace("\\", "/")
     env_vars["FILE_PATH"] = "/opt/clinica/data/"
@@ -232,8 +235,18 @@ def main():
     seed_val = get_input("Enable clinical data seeding? (y/N): ", "N", "SEED_CLINICAL_DATA")
     seed_clinical = seed_val.lower() in ["y", "yes", "true", "1"]
     env_vars["SEED_CLINICAL_DATA"] = "true" if seed_clinical else "false"
+
+    # Create an automatic backup copy of any pre-existing environment configuration file at the project root
+    # prior to performing any write actions
+    env_path = os.path.join(project_root, ".env")
+    if os.path.exists(env_path):
+        import shutil
+        backup_path = os.path.join(project_root, ".env.bak")
+        shutil.copy2(env_path, backup_path)
+        print(f"Backup copy successfully created: {backup_path}")
+
     if seed_clinical:
-        default_template = os.path.join(app_root, "dummy_template.xlsx")
+        default_template = os.path.join(project_root, "dummy_template.xlsx")
         template_path = get_input("Path to local Excel template: ", default_template, "HOST_CLINICAL_TEMPLATE_PATH")
         if not os.path.isfile(template_path):
             if sys.stdin.isatty() and not os.environ.get("HOST_CLINICAL_TEMPLATE_PATH"):
@@ -244,7 +257,7 @@ def main():
         env_vars["HOST_CLINICAL_TEMPLATE_PATH"] = os.path.abspath(template_path).replace("\\", "/")
         env_vars["CLINICAL_TEMPLATE_PATH"] = "/opt/clinica/template.xlsx"
     else:
-        dummy_path = os.path.join(app_root, "dummy_template.xlsx")
+        dummy_path = os.path.join(project_root, "dummy_template.xlsx")
         with open(dummy_path, "w", newline='\n') as f:
             pass
         env_vars["HOST_CLINICAL_TEMPLATE_PATH"] = dummy_path.replace("\\", "/")
@@ -254,7 +267,6 @@ def main():
     os.makedirs(host_file_path, exist_ok=True)
     print(f"Created directory structure: {host_file_path}")
 
-    env_path = os.path.join(app_root, ".env")
     with open(env_path, "w", newline='\n') as f:
         for k, v in env_vars.items():
             f.write(f"{k}={v}\n")
