@@ -327,7 +327,9 @@ public class DiscrepancyNoteService {
     }
 
     private UserAccountBean convertUserToBean(UserAccount user) {
-        if (user == null) return null;
+        if (user == null) {
+            return null;
+        }
         UserAccountBean bean = new UserAccountBean();
         bean.setId(user.getUserId());
         bean.setName(user.getUserName());
