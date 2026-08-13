@@ -51,14 +51,39 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                     org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
                 }
 
+                Map<String, Object> claims = extractClaims(authentication);
+                if (claims != null && !claims.isEmpty() && !"service_account".equals(username)) {
+                    try {
+                        provisionOrUpdateUser(username, claims);
+                    } catch (Exception ex) {
+                        logger.error("Failed to provision or update user " + username, ex);
+                        response.setContentType("text/html;charset=UTF-8");
+                        response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                        response.getWriter().write(
+                            "<html>" +
+                            "<head><title>Authentication Error</title></head>" +
+                            "<body style='font-family: Arial, sans-serif; text-align: center; margin-top: 100px;'>" +
+                            "  <div style='display: inline-block; padding: 30px; border: 1px solid #ccc; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1);'>" +
+                            "    <h2 style='color: #d9534f;'>Authentication Error</h2>" +
+                            "    <p>A transient database or network error occurred during your single sign-on authentication.</p>" +
+                            "    <p>Please try again later or contact your system administrator.</p>" +
+                            "    <a href=\"/app/login\" style='display: inline-block; margin-top: 15px; padding: 10px 20px; background-color: #337ab7; color: white; text-decoration: none; border-radius: 3px;'>Return to Login</a>" +
+                            "  </div>" +
+                            "</body>" +
+                            "</html>"
+                        );
+                        return;
+                    }
+                }
+
                 UserAccountBean userBean = null;
                 if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) {
                     org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth = (org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) authentication;
-                    Map<String, Object> claims = jwtAuth.getTokenAttributes();
+                    Map<String, Object> claimsForJwt = jwtAuth.getTokenAttributes();
                     
                     // Validate tenant ID claim
-                    Object tenantIdObj = claims.get("tenant_id");
-                    logger.warn("DEBUG JWT: tenantIdObj = " + tenantIdObj + ", claims = " + claims);
+                    Object tenantIdObj = claimsForJwt.get("tenant_id");
+                    logger.warn("DEBUG JWT: tenantIdObj = " + tenantIdObj + ", claims = " + claimsForJwt);
                     if (tenantIdObj == null) {
                         logger.warn("DEBUG JWT: tenantIdObj is null, rejecting with 403");
                         logger.error("SECURITY ALERT: User identity token lacks a valid tenant identifier.");
@@ -184,6 +209,272 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                 MDC.remove(LoggingConstants.USERNAME);
             }
             org.akaza.openclinica.modern.security.TenantContext.clear();
+        }
+    }
+
+    private Map<String, Object> extractClaims(Authentication authentication) {
+        if (authentication == null) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal == null) {
+            return null;
+        }
+
+        Map<String, Object> claims = new HashMap<>();
+
+        if (principal instanceof org.springframework.security.oauth2.core.user.OAuth2User) {
+            org.springframework.security.oauth2.core.user.OAuth2User oauth2User = 
+                (org.springframework.security.oauth2.core.user.OAuth2User) principal;
+            claims.putAll(oauth2User.getAttributes());
+        }
+        else if (principal instanceof org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticatedPrincipal) {
+            org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticatedPrincipal saml2Principal = 
+                (org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticatedPrincipal) principal;
+            
+            Map<String, java.util.List<Object>> attrs = saml2Principal.getAttributes();
+            for (Map.Entry<String, java.util.List<Object>> entry : attrs.entrySet()) {
+                java.util.List<Object> vals = entry.getValue();
+                if (vals != null && !vals.isEmpty()) {
+                    claims.put(entry.getKey(), vals.get(0));
+                }
+            }
+        }
+        else if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) {
+            org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth = 
+                (org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) authentication;
+            claims.putAll(jwtAuth.getTokenAttributes());
+        }
+
+        return claims;
+    }
+
+    private String getClaimAsString(Map<String, Object> claims, String... keys) {
+        if (claims == null) return null;
+        for (String key : keys) {
+            Object val = claims.get(key);
+            if (val != null) {
+                return String.valueOf(val).trim();
+            }
+        }
+        return null;
+    }
+
+    private int getClaimAsInt(Map<String, Object> claims, int defaultVal, String... keys) {
+        if (claims == null) return defaultVal;
+        for (String key : keys) {
+            Object val = claims.get(key);
+            if (val != null) {
+                try {
+                    if (val instanceof Number) {
+                        return ((Number) val).intValue();
+                    }
+                    return Integer.parseInt(String.valueOf(val).trim());
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+        }
+        return defaultVal;
+    }
+
+    private int getDefaultStudyId() {
+        try (java.sql.Connection conn = dataSource.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement("SELECT study_id FROM study ORDER BY study_id ASC LIMIT 1");
+             java.sql.ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to retrieve default study id", e);
+        }
+        return 1;
+    }
+
+    private boolean isStudyIdValid(int studyId) {
+        try (java.sql.Connection conn = dataSource.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM study WHERE study_id = ?")) {
+            ps.setInt(1, studyId);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (Exception e) {
+            logger.error("Failed to validate study id: " + studyId, e);
+        }
+        return false;
+    }
+
+    private Integer getUserIdByUsername(String username) {
+        try (java.sql.Connection conn = dataSource.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement("SELECT user_id FROM user_account WHERE user_name = ?")) {
+            ps.setString(1, username);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to query user_id by username", e);
+        }
+        return null;
+    }
+
+    private int getNextUserId() throws java.sql.SQLException {
+        try (java.sql.Connection conn = dataSource.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement("SELECT nextval('user_account_user_id_seq')");
+             java.sql.ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        }
+        throw new java.sql.SQLException("Could not retrieve next user_id value from sequence.");
+    }
+
+    private boolean studyUserRoleExists(String username, int studyId) {
+        try (java.sql.Connection conn = dataSource.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM study_user_role WHERE user_name = ? AND study_id = ?")) {
+            ps.setString(1, username);
+            ps.setInt(2, studyId);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (Exception e) {
+            logger.error("Failed to check study user role mapping", e);
+        }
+        return false;
+    }
+
+    private void updateStudyUserRole(String username, int studyId, String roleName) {
+        try (java.sql.Connection conn = dataSource.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE study_user_role SET role_name = ?, status_id = 1, date_updated = NOW() WHERE user_name = ? AND study_id = ?")) {
+            ps.setString(1, roleName);
+            ps.setString(2, username);
+            ps.setInt(3, studyId);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            logger.error("Failed to update study user role mapping", e);
+        }
+    }
+
+    private void insertStudyUserRole(String username, int studyId, String roleName) {
+        try (java.sql.Connection conn = dataSource.getConnection();
+             java.sql.PreparedStatement ps = conn.prepareStatement(
+                     "INSERT INTO study_user_role (role_name, study_id, status_id, user_name, owner_id, date_created) VALUES (?, ?, 1, ?, 1, NOW())")) {
+            ps.setString(1, roleName);
+            ps.setInt(2, studyId);
+            ps.setString(3, username);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            logger.error("Failed to insert study user role mapping", e);
+        }
+    }
+
+    private void provisionOrUpdateUser(String username, Map<String, Object> claims) throws Exception {
+        String firstName = getClaimAsString(claims, "given_name", "firstName", "first_name", "givenName");
+        if (firstName == null || firstName.isEmpty()) firstName = "First";
+
+        String lastName = getClaimAsString(claims, "family_name", "lastName", "last_name", "familyName");
+        if (lastName == null || lastName.isEmpty()) lastName = "Last";
+
+        String email = getClaimAsString(claims, "email", "mail");
+        if (email == null || email.isEmpty()) email = username + "@example.com";
+
+        String affiliation = getClaimAsString(claims, "institutional_affiliation", "affiliation", "organization", "org");
+        if (affiliation == null || affiliation.isEmpty()) affiliation = "SSO";
+
+        int studyId = getClaimAsInt(claims, -1, "active_study_id", "study_id", "study", "activeStudyId");
+        if (studyId <= 0 || !isStudyIdValid(studyId)) {
+            studyId = getDefaultStudyId();
+        }
+
+        String roleName = getClaimAsString(claims, "role", "roles", "system_role", "systemRole");
+        org.akaza.openclinica.bean.core.Role finalRole = org.akaza.openclinica.bean.core.Role.RESEARCHASSISTANT;
+        if (roleName != null) {
+            String cleanRole = roleName.toLowerCase().replaceAll("[_\\s\\-]+", "");
+            if (cleanRole.contains("admin") || cleanRole.contains("sysadmin")) {
+                finalRole = org.akaza.openclinica.bean.core.Role.ADMIN;
+            } else if (cleanRole.contains("coordinator")) {
+                finalRole = org.akaza.openclinica.bean.core.Role.COORDINATOR;
+            } else if (cleanRole.contains("director")) {
+                finalRole = org.akaza.openclinica.bean.core.Role.STUDYDIRECTOR;
+            } else if (cleanRole.contains("investigator")) {
+                finalRole = org.akaza.openclinica.bean.core.Role.INVESTIGATOR;
+            } else if (cleanRole.contains("monitor")) {
+                finalRole = org.akaza.openclinica.bean.core.Role.MONITOR;
+            } else if (cleanRole.contains("ra2") || cleanRole.contains("entry2")) {
+                finalRole = org.akaza.openclinica.bean.core.Role.RESEARCHASSISTANT2;
+            } else if (cleanRole.contains("ra") || cleanRole.contains("entry") || cleanRole.contains("assistant")) {
+                finalRole = org.akaza.openclinica.bean.core.Role.RESEARCHASSISTANT;
+            }
+        }
+
+        int userTypeId = (finalRole == org.akaza.openclinica.bean.core.Role.ADMIN) ? 1 : 2;
+
+        Integer existingUserId = getUserIdByUsername(username);
+
+        if (existingUserId == null) {
+            int newUserId = getNextUserId();
+            logger.warn("SSO: Provisioning new user " + username + " with ID " + newUserId + ", study ID " + studyId + ", role " + finalRole.getName());
+            
+            try (java.sql.Connection conn = dataSource.getConnection();
+                 java.sql.PreparedStatement ps = conn.prepareStatement(
+                         "INSERT INTO user_account (" +
+                         "    user_id, user_name, passwd, first_name, last_name, email, " +
+                         "    active_study, institutional_affiliation, status_id, owner_id, " +
+                         "    date_created, passwd_challenge_question, passwd_challenge_answer, phone, " +
+                         "    user_type_id, enabled, account_non_locked, lock_counter, run_webservices, " +
+                         "    access_code, enable_api_key, api_key" +
+                         ") VALUES (" +
+                         "    ?, ?, '', ?, ?, ?, " +
+                         "    ?, ?, 1, 1, " +
+                         "    NOW(), '', '', '', " +
+                         "    ?, TRUE, TRUE, 0, FALSE, " +
+                         "    '', FALSE, ''" +
+                         ")")) {
+                ps.setInt(1, newUserId);
+                ps.setString(2, username);
+                ps.setString(3, firstName);
+                ps.setString(4, lastName);
+                ps.setString(5, email);
+                ps.setInt(6, studyId);
+                ps.setString(7, affiliation);
+                ps.setInt(8, userTypeId);
+                ps.executeUpdate();
+            }
+        } else {
+            logger.warn("SSO: Updating returning user " + username + " with ID " + existingUserId + ", study ID " + studyId + ", role " + finalRole.getName());
+            
+            try (java.sql.Connection conn = dataSource.getConnection();
+                 java.sql.PreparedStatement ps = conn.prepareStatement(
+                         "UPDATE user_account SET " +
+                         "    first_name = ?, " +
+                         "    last_name = ?, " +
+                         "    email = ?, " +
+                         "    institutional_affiliation = ?, " +
+                         "    active_study = ?, " +
+                         "    user_type_id = ?, " +
+                         "    enabled = TRUE, " +
+                         "    account_non_locked = TRUE, " +
+                         "    status_id = 1, " +
+                         "    date_updated = NOW() " +
+                         "WHERE user_id = ?")) {
+                ps.setString(1, firstName);
+                ps.setString(2, lastName);
+                ps.setString(3, email);
+                ps.setString(4, affiliation);
+                ps.setInt(5, studyId);
+                ps.setInt(6, userTypeId);
+                ps.setInt(7, existingUserId);
+                ps.executeUpdate();
+            }
+        }
+
+        if (!studyUserRoleExists(username, studyId)) {
+            insertStudyUserRole(username, studyId, finalRole.getName());
+        } else {
+            updateStudyUserRole(username, studyId, finalRole.getName());
         }
     }
 
