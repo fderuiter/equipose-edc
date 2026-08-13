@@ -115,6 +115,10 @@
     <bean id="studyDaoJDBC" lazy-init="true" class="org.akaza.openclinica.dao.managestudy.StudyDAO">
         <constructor-arg ref="dataSource"/>
     </bean>
+
+    <bean id="discrepancyNoteDaoJDBC" lazy-init="true" class="org.akaza.openclinica.dao.managestudy.DiscrepancyNoteDAO">
+        <constructor-arg ref="dataSource"/>
+    </bean>
     
     <!-- Added new DAOs -->
     <bean id="studyEventDefinitionDaoJDBC" lazy-init="true" class="org.akaza.openclinica.dao.managestudy.StudyEventDefinitionDAO">
