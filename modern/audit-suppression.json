@@ -1,1 +1,5 @@
-["brace-expansion", "js-yaml", "nanoid"]
+[
+  "brace-expansion",
+  "js-yaml",
+  "nanoid"
+]
