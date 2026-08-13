@@ -122,35 +122,7 @@ public class RandomizationRegistrar {
     }
 
         public String randomizeStudy(String studyOid, String studyName,UserAccountBean userAccount) {
-            
-            String ocUrl = CoreResources.getField("sysURL.base") + "rest2/openrosa/" + studyOid;
-            org.akaza.openclinica.sdk.model.SeRandomizationDTO sdkDto = new org.akaza.openclinica.sdk.model.SeRandomizationDTO();
-            sdkDto.setStudyOid(studyOid);
-            sdkDto.setInstanceUrl(ocUrl);
-            sdkDto.setOcUserUsername(userAccount.getName());
-            sdkDto.setOcUserName(userAccount.getFirstName());
-            sdkDto.setOcUserLastname(userAccount.getLastName());
-            sdkDto.setOcUserEmailAddress(userAccount.getEmail());
-            sdkDto.setStudyName(studyName);
-            sdkDto.setOpenClinicaVersion(CoreResources.getField("OpenClinica.version"));
-
-        try {
-            org.akaza.openclinica.sdk.ApiClient client = new org.akaza.openclinica.sdk.ApiClient();
-            client.updateBaseUri(CoreResources.getField("moduleManager"));
-            org.akaza.openclinica.sdk.api.DefaultApi api = new org.akaza.openclinica.sdk.api.DefaultApi(client);
-            
-            org.akaza.openclinica.sdk.model.SeRandomizationDTO response = api.appRestOcSeRandomizationsPost(sdkDto);
-            if (response != null && response.getStatus() != null)
-                return response.getStatus();
-
-        } catch (Exception e) {
-            logger.error(e.getMessage());
-            logger.error(ExceptionUtils.getStackTrace(e));
-            System.out.println(e.getMessage());
-            System.out.println(ExceptionUtils.getStackTrace(e));
-
+            throw new UnsupportedOperationException("The randomization module has been decommissioned. Randomization actions are no longer supported.");
         }
-        return "";
-    }
 
 }
