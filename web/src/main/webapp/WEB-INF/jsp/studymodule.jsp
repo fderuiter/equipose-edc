@@ -642,7 +642,7 @@
           </c:if>
 
 
-         <c:if test="${moduleManager!= '' && moduleManager!= null}">
+         <c:if test="false">
           <tbody>
               <tr>
                   <td>&nbsp;</td>
@@ -745,7 +745,7 @@
     </div>
 </c:if>
 
- <c:if test="${moduleManager!= '' && moduleManager!= null}">
+ <c:if test="false">
     <div align="left" id="requestRandomizationForm" class="randomization-registration-div">
         <form action="studymodule/${fn:escapeXml(currentStudy.oid)}/randomize" method="post">
             <h1>
