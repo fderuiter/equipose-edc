@@ -173,7 +173,7 @@ public class EditUserAccountServlet extends SecureController {
                 user.setEmail(fp.getString(INPUT_EMAIL));
                 user.setInstitutionalAffiliation(fp.getString(INPUT_INSTITUTION));
                 user.setUpdater(ub);
-                user.setRunWebservices(fp.getBoolean(INPUT_RUN_WEBSERVICES));
+                user.setRunWebservices(false);
                 user.setEnableApiKey(true);
                 
                 UserType ut = UserType.get(fp.getInt(INPUT_USER_TYPE));
@@ -267,7 +267,7 @@ public class EditUserAccountServlet extends SecureController {
         // UserType.USER.getId();
         fp.addPresetValue(INPUT_USER_TYPE, userTypeId);
         fp.addPresetValue(ARG_USERID, user.getId());
-        fp.addPresetValue(INPUT_RUN_WEBSERVICES, user.getRunWebservices() == true ? 1 : 0);
+
 
         String sendPwd = SQLInitServlet.getField("user_account_notification");
         fp.addPresetValue(USER_ACCOUNT_NOTIFICATION, sendPwd);
@@ -281,7 +281,7 @@ public class EditUserAccountServlet extends SecureController {
         String textFields[] = { ARG_USERID, INPUT_FIRST_NAME, INPUT_LAST_NAME, INPUT_EMAIL, INPUT_INSTITUTION, INPUT_DISPLAY_PWD };
         fp.setCurrentStringValuesAsPreset(textFields);
 
-        String ddlbFields[] = { INPUT_USER_TYPE, INPUT_RESET_PASSWORD, INPUT_RUN_WEBSERVICES };
+        String ddlbFields[] = { INPUT_USER_TYPE, INPUT_RESET_PASSWORD };
         fp.setCurrentIntValuesAsPreset(ddlbFields);
 
         // String chkFields[] = { };

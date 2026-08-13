@@ -78,7 +78,7 @@ public class UserAccount extends DataMapDomainObject {
 	private boolean enabled;
 	private boolean accountNonLocked;
 	private int lockCounter;
-	private boolean runWebservices;
+	private Boolean runWebservices = false;
 	private String accessCode;
 	private String timeZone;
 	private boolean enableApiKey;
@@ -114,12 +114,12 @@ public class UserAccount extends DataMapDomainObject {
 	}
 
 	public UserAccount(int userId, boolean enabled, boolean accountNonLocked,
-			int lockCounter, boolean runWebservices) {
+			int lockCounter, Boolean runWebservices) {
 		this.userId = userId;
 		this.enabled = enabled;
 		this.accountNonLocked = accountNonLocked;
 		this.lockCounter = lockCounter;
-		this.runWebservices = runWebservices;
+		this.runWebservices = runWebservices != null ? runWebservices : false;
 	}
 
 	@Id
@@ -330,13 +330,13 @@ public class UserAccount extends DataMapDomainObject {
 		this.lockCounter = lockCounter;
 	}
 
-	@Column(name = "run_webservices", nullable = false)
-	public boolean isRunWebservices() {
-		return this.runWebservices;
+	@Column(name = "run_webservices")
+	public Boolean isRunWebservices() {
+		return this.runWebservices != null ? this.runWebservices : false;
 	}
 
-	public void setRunWebservices(boolean runWebservices) {
-		this.runWebservices = runWebservices;
+	public void setRunWebservices(Boolean runWebservices) {
+		this.runWebservices = runWebservices != null ? runWebservices : false;
 	}
 
 	

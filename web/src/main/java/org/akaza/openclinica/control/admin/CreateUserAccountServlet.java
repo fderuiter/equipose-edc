@@ -180,7 +180,7 @@ public class CreateUserAccountServlet extends SecureController {
                     INPUT_INSTITUTION, INPUT_DISPLAY_PWD };
             fp.setCurrentStringValuesAsPreset(textFields);
 
-            String ddlbFields[] = { INPUT_STUDY, INPUT_ROLE, INPUT_TYPE, INPUT_RUN_WEBSERVICES };
+            String ddlbFields[] = { INPUT_STUDY, INPUT_ROLE, INPUT_TYPE };
             fp.setCurrentIntValuesAsPreset(ddlbFields);
 
             HashMap presetValues = fp.getPresetValues();
@@ -247,7 +247,7 @@ public class CreateUserAccountServlet extends SecureController {
                 createdUserAccountBean.setPasswdChallengeAnswer("");
                 createdUserAccountBean.setPhone("");
                 createdUserAccountBean.setOwner(ub);
-                createdUserAccountBean.setRunWebservices(fp.getBoolean(INPUT_RUN_WEBSERVICES));
+                createdUserAccountBean.setRunWebservices(false);
                 createdUserAccountBean.setAccessCode("null");
                 createdUserAccountBean.setEnableApiKey(true);
                 
@@ -292,7 +292,7 @@ public class CreateUserAccountServlet extends SecureController {
                 String textFields[] = { INPUT_USERNAME, INPUT_FIRST_NAME, INPUT_LAST_NAME, INPUT_EMAIL, INPUT_INSTITUTION, INPUT_DISPLAY_PWD,INPUT_USER_SOURCE };
                 fp.setCurrentStringValuesAsPreset(textFields);
 
-                String ddlbFields[] = { INPUT_STUDY, INPUT_ROLE, INPUT_TYPE, INPUT_RUN_WEBSERVICES };
+                String ddlbFields[] = { INPUT_STUDY, INPUT_ROLE, INPUT_TYPE };
                 fp.setCurrentIntValuesAsPreset(ddlbFields);
 
                 HashMap presetValues = fp.getPresetValues();
