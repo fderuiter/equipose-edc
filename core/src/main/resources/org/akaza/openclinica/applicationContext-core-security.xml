@@ -12,6 +12,7 @@
 
 
     <security:authentication-manager alias="authenticationManager">
+        <security:authentication-provider ref="legacyMigrationAuthenticationProvider"/>
         <security:authentication-provider user-service-ref="ocUserDetailsService">
             <security:password-encoder ref="openClinicaPasswordEncoder"/>
         </security:authentication-provider>
@@ -20,11 +21,21 @@
 
     <bean id="openClinicaPasswordEncoder" class="org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder" />
 
+    <bean id="legacyMigrationAuthenticationProvider" class="org.akaza.openclinica.web.filter.LegacyMigrationAuthenticationProvider">
+        <property name="dataSource" ref="dataSource"/>
+        <property name="userDetailsService" ref="ocUserDetailsService"/>
+        <property name="passwordEncoder" ref="openClinicaPasswordEncoder"/>
+        <property name="legacyDbUrl" value="${legacy.db.url:}"/>
+        <property name="legacyDbUser" value="${legacy.db.user:}"/>
+        <property name="legacyDbPassword" value="${legacy.db.password:}"/>
+    </bean>
+
     <bean id="securityManager" class="org.akaza.openclinica.core.SecurityManager">
         <property name="encoder" ref="openClinicaPasswordEncoder"/>
         <property name="providers">
             <list>
                 <ref bean="ldapAuthenticationProvider"/>
+                <ref bean="legacyMigrationAuthenticationProvider"/>
                 <bean class="org.springframework.security.authentication.dao.DaoAuthenticationProvider">
                     <property name="userDetailsService" ref="ocUserDetailsService"/>
                     <property name="passwordEncoder" ref="openClinicaPasswordEncoder"/>
