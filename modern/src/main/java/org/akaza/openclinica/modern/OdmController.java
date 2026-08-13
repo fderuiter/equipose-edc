@@ -137,20 +137,48 @@ public class OdmController {
                 // Ignore and use 1
             }
 
-            String auditSql = "INSERT INTO audit_log_event " +
-                "(audit_date, audit_table, entity_id, entity_name, reason_for_change, old_value, new_value, audit_log_event_type_id) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-            
-            jdbcTemplate.update(auditSql, 
-                new Date(),
-                "clinical_records",
-                1, // entityId
-                id, // entityName
-                "Automated integration data update",
-                null,
-                "Imported clinical payload for subject: " + subjectOid,
-                auditLogEventTypeId
-            );
+            Integer auditId = null;
+            try {
+                auditId = jdbcTemplate.queryForObject("SELECT nextval('audit_log_event_audit_id_seq')", Integer.class);
+            } catch (Exception e) {
+                try {
+                    auditId = jdbcTemplate.queryForObject("SELECT audit_log_event_audit_id_seq.nextval FROM dual", Integer.class);
+                } catch (Exception ex) {
+                    // Fallback to null if not supported
+                }
+            }
+
+            String auditSql;
+            if (auditId != null) {
+                auditSql = "INSERT INTO audit_log_event " +
+                    "(audit_id, audit_date, audit_table, entity_id, entity_name, reason_for_change, old_value, new_value, audit_log_event_type_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                jdbcTemplate.update(auditSql, 
+                    auditId,
+                    new Date(),
+                    "clinical_records",
+                    1, // entityId
+                    id, // entityName
+                    "Automated integration data update",
+                    null,
+                    "Imported clinical payload for subject: " + subjectOid,
+                    auditLogEventTypeId
+                );
+            } else {
+                auditSql = "INSERT INTO audit_log_event " +
+                    "(audit_date, audit_table, entity_id, entity_name, reason_for_change, old_value, new_value, audit_log_event_type_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                jdbcTemplate.update(auditSql, 
+                    new Date(),
+                    "clinical_records",
+                    1, // entityId
+                    id, // entityName
+                    "Automated integration data update",
+                    null,
+                    "Imported clinical payload for subject: " + subjectOid,
+                    auditLogEventTypeId
+                );
+            }
 
             return ResponseEntity.ok("Import successful");
 
