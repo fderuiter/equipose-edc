@@ -42,7 +42,10 @@ for (const [key, value] of Object.entries(darkColors)) {
 cssContent += `  }\n`;
 cssContent += `}\n`;
 
-const sharedThemeCssPath = path.join(__dirname, '../web/src/main/webapp/css/shared-theme.css');
+const sharedThemeCssPath = path.join(
+  __dirname,
+  '../web/src/main/webapp/css/shared-theme.css'
+);
 fs.writeFileSync(sharedThemeCssPath, cssContent);
 console.log(`Successfully compiled CSS variables to ${sharedThemeCssPath}`);
 
@@ -60,14 +63,14 @@ const vuetifyTheme = {
           error: lightColors.error,
           info: lightColors.focus,
           success: lightColors.primary,
-          warning: lightColors.highlight
+          warning: lightColors.highlight,
         },
         variables: {
           'spacing-sm': spacing.sm,
           'spacing-md': spacing.md,
           'spacing-lg': spacing.lg,
-          'spacing-xl': spacing.xl
-        }
+          'spacing-xl': spacing.xl,
+        },
       },
       dark: {
         dark: true,
@@ -78,25 +81,31 @@ const vuetifyTheme = {
           error: darkColors.error,
           info: darkColors.focus,
           success: darkColors.primary,
-          warning: darkColors.highlight
+          warning: darkColors.highlight,
         },
         variables: {
           'spacing-sm': spacing.sm,
           'spacing-md': spacing.md,
           'spacing-lg': spacing.lg,
-          'spacing-xl': spacing.xl
-        }
-      }
-    }
-  }
+          'spacing-xl': spacing.xl,
+        },
+      },
+    },
+  },
 };
 
 const vuetifyOutputPath = path.join(__dirname, 'vuetify-theme.json');
-fs.writeFileSync(vuetifyOutputPath, JSON.stringify(vuetifyTheme, null, 2));
+fs.writeFileSync(
+  vuetifyOutputPath,
+  JSON.stringify(vuetifyTheme, null, 2) + '\n'
+);
 console.log(`Successfully compiled Vuetify config to ${vuetifyOutputPath}`);
 
 // Copy also to web css folder for access
-fs.writeFileSync(path.join(__dirname, '../web/src/main/webapp/css/vuetify-theme.json'), JSON.stringify(vuetifyTheme, null, 2));
+fs.writeFileSync(
+  path.join(__dirname, '../web/src/main/webapp/css/vuetify-theme.json'),
+  JSON.stringify(vuetifyTheme, null, 2) + '\n'
+);
 
 // 3. Compile Tailwind Configuration
 const tailwindTheme = {
@@ -105,46 +114,52 @@ const tailwindTheme = {
       colors: {
         primary: {
           light: lightColors.primary,
-          dark: darkColors.primary
+          dark: darkColors.primary,
         },
         text: {
           light: lightColors.text,
-          dark: darkColors.text
+          dark: darkColors.text,
         },
         background: {
           light: lightColors.background,
-          dark: darkColors.background
+          dark: darkColors.background,
         },
         border: {
           light: lightColors.border,
-          dark: darkColors.border
+          dark: darkColors.border,
         },
         focus: {
           light: lightColors.focus,
-          dark: darkColors.focus
+          dark: darkColors.focus,
         },
         highlight: {
           light: lightColors.highlight,
-          dark: darkColors.highlight
+          dark: darkColors.highlight,
         },
         error: {
           light: lightColors.error,
-          dark: darkColors.error
-        }
+          dark: darkColors.error,
+        },
       },
       spacing: {
         sm: spacing.sm,
         md: spacing.md,
         lg: spacing.lg,
-        xl: spacing.xl
-      }
-    }
-  }
+        xl: spacing.xl,
+      },
+    },
+  },
 };
 
 const tailwindOutputPath = path.join(__dirname, 'tailwind-theme.json');
-fs.writeFileSync(tailwindOutputPath, JSON.stringify(tailwindTheme, null, 2));
+fs.writeFileSync(
+  tailwindOutputPath,
+  JSON.stringify(tailwindTheme, null, 2) + '\n'
+);
 console.log(`Successfully compiled Tailwind config to ${tailwindOutputPath}`);
 
 // Copy also to web css folder for access
-fs.writeFileSync(path.join(__dirname, '../web/src/main/webapp/css/tailwind-theme.json'), JSON.stringify(tailwindTheme, null, 2));
+fs.writeFileSync(
+  path.join(__dirname, '../web/src/main/webapp/css/tailwind-theme.json'),
+  JSON.stringify(tailwindTheme, null, 2) + '\n'
+);
