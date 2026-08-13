@@ -138,8 +138,6 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                             }
                         }
                     }
-                        }
-                    }
 
                     if (userIdentifierObj == null) {
                         logger.error("SECURITY ALERT: Configured user identifier claims " + java.util.Arrays.toString(candidateKeys) + " are missing or blank in the token.");
@@ -238,8 +236,6 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                         Object activeStudyIdObj = claims.get("active_study_id");
                         if (activeStudyIdObj instanceof Number) {
                             userBean.setActiveStudyId(((Number) activeStudyIdObj).intValue());
-                        }
-                    }
                         }
                     }
                 } else {
