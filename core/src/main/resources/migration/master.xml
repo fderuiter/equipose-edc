@@ -19,5 +19,6 @@
   <include  file="migration/modernization.xml"/>
   <include  file="migration/modernization_flattening.xml"/>
   <include  file="migration/drop_audit_triggers.xml"/>
+  <include  file="migration/custom/release.xml"/>
 </databaseChangeLog> 
 
