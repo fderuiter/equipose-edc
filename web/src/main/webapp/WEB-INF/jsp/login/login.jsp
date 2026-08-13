@@ -104,6 +104,14 @@
                    </form>
                    <br/><jsp:include page="../login-include/login-alertbox.jsp"/>
                    <%-- <a href="<c:url value="/RequestPassword"/>"> <fmt:message key="forgot_password" bundle="${resword}"/></a> --%>
+                   
+                   <div id="ssoPartition" style="display: none; margin-top: 20px; border-top: 2px dashed #ccc; padding-top: 15px; text-align: center;">
+                       <h3 style="color: #333; margin-bottom: 12px; font-family: Arial, sans-serif;">Enterprise Single Sign-On</h3>
+                       <p style="font-size: 11px; color: #666; margin-bottom: 10px;">Log in using your enterprise provider (Keycloak, Azure AD, etc.)</p>
+                       <a href="#" id="ssoRedirectButton" class="loginbutton" style="display: inline-block; text-decoration: none; padding: 8px 16px; background-color: #0076bc; color: white; border-radius: 4px; font-weight: bold; font-family: Arial, sans-serif;">
+                           Sign In with SSO
+                       </a>
+                   </div>
                </div>
             <!-- End Login box contents -->
             </div>
@@ -139,6 +147,45 @@
             jQuery('#cancel').click(function() {
                 jQuery.unblockUI();
                 return false;
+            });
+
+            // Dynamic OIDC configuration loader
+            jQuery.getJSON('/auth/api/auth/config', function(config) {
+                if (config && config.oidcProvider && config.oidcProvider !== 'local') {
+                    jQuery('#ssoPartition').show();
+                    jQuery('#ssoRedirectButton').click(function(e) {
+                        e.preventDefault();
+                        var authUrl = config.authorizationEndpoint;
+                        if (authUrl) {
+                            var redirectUri = window.location.origin + '/auth/login/oauth2/code/oidc';
+                            var target = authUrl + '?response_type=code&client_id=' + encodeURIComponent(config.clientId) +
+                                         '&scope=' + encodeURIComponent(config.scopes) +
+                                         '&redirect_uri=' + encodeURIComponent(redirectUri);
+                            window.location.href = target;
+                        } else {
+                            window.location.href = '/auth/oauth2/authorization/' + config.oidcProvider;
+                        }
+                    });
+                }
+            }).fail(function() {
+                jQuery.getJSON('/api/auth/config', function(config) {
+                    if (config && config.oidcProvider && config.oidcProvider !== 'local') {
+                        jQuery('#ssoPartition').show();
+                        jQuery('#ssoRedirectButton').click(function(e) {
+                            e.preventDefault();
+                            var authUrl = config.authorizationEndpoint;
+                            if (authUrl) {
+                                var redirectUri = window.location.origin + '/login/oauth2/code/oidc';
+                                var target = authUrl + '?response_type=code&client_id=' + encodeURIComponent(config.clientId) +
+                                             '&scope=' + encodeURIComponent(config.scopes) +
+                                             '&redirect_uri=' + encodeURIComponent(redirectUri);
+                                window.location.href = target;
+                            } else {
+                                window.location.href = '/oauth2/authorization/' + config.oidcProvider;
+                            }
+                        });
+                    }
+                });
             });
         });
 
