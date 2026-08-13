@@ -49,7 +49,9 @@ if (auditResult.vulnerabilities) {
 }
 
 if (failed) {
-  console.warn('Security audit flagged high/critical vulnerabilities, but continuing build.');
+  console.warn(
+    'Security audit flagged high/critical vulnerabilities, but continuing build.'
+  );
 } else {
   console.log('Security audit passed.');
 }
