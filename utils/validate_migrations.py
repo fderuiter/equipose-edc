@@ -37,7 +37,18 @@ def collect_core_tables(migration_dir, custom_dir):
     core_tables.update(safety_tables)
     return core_tables
 
-def check_migrations(migration_dir='/app/core/src/main/resources/migration', custom_dir='/app/core/src/main/resources/migration/custom', exit_on_fail=True):
+# Resolve default directories dynamically relative to the script location
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+DEFAULT_MIGRATION_DIR = os.path.join(PROJECT_ROOT, 'core', 'src', 'main', 'resources', 'migration')
+DEFAULT_CUSTOM_DIR = os.path.join(DEFAULT_MIGRATION_DIR, 'custom')
+
+def check_migrations(migration_dir=None, custom_dir=None, exit_on_fail=True):
+    if migration_dir is None:
+        migration_dir = DEFAULT_MIGRATION_DIR
+    if custom_dir is None:
+        custom_dir = DEFAULT_CUSTOM_DIR
+
     # 1. Collect core tables
     core_tables = collect_core_tables(migration_dir, custom_dir)
     
