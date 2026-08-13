@@ -24,6 +24,7 @@ import java.util.StringTokenizer;
  * 
  */
 public class StudyBean extends AuditableEntityBean {
+    private String tenantId;
     private int parentStudyId = 0;
     // YW << The original reason to add this is being able to list on
     // userbox.jsp the study name to which a site belong.
@@ -1087,6 +1088,14 @@ public class StudyBean extends AuditableEntityBean {
 
     public boolean isSite(int parentStudyId) {
         return parentStudyId > 0 ? true : false;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
 }

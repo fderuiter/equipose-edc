@@ -37,10 +37,24 @@ public class StudySecurityValidator {
             return true;
         }
 
-        // Find the study ID from uniqueProtocolID
+        // Check if study exists globally (bypassing tenant filter)
+        org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
+        List<Integer> globalIds;
+        try {
+            globalIds = jdbcTemplate.queryForList("SELECT study_id FROM study WHERE unique_identifier = ?", Integer.class, uniqueProtocolID);
+        } finally {
+            org.akaza.openclinica.modern.security.TenantContext.setBypass(false);
+        }
+
+        if (globalIds.isEmpty()) {
+            throw new IllegalArgumentException("Study not found");
+        }
+
+        // Find the study ID from uniqueProtocolID in the current tenant's context
         List<Integer> studyIds = jdbcTemplate.queryForList("SELECT study_id FROM study WHERE unique_identifier = ?", Integer.class, uniqueProtocolID);
         if (studyIds.isEmpty()) {
-            return false;
+            // Study exists globally but not in this tenant context, obscure its existence by throwing study not found!
+            throw new IllegalArgumentException("Study not found");
         }
         Integer studyId = studyIds.get(0);
 
