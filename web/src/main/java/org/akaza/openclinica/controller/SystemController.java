@@ -1252,7 +1252,8 @@ public class SystemController {
         URL randomizeUrl = null;
         HashMap<String, String> mapMetadata = new HashMap<>();
 
-        if (ocRandomizeStatus.equals("enabled")) {
+        boolean randomizationEnabledVal = "true".equalsIgnoreCase(CoreResources.getField("randomization.enabled"));
+        if (randomizationEnabledVal && ocRandomizeStatus.equals("enabled")) {
             try {
 
                 RandomizationRegistrar randomizationRegistrar = new RandomizationRegistrar();

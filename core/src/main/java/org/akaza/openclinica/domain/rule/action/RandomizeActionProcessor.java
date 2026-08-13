@@ -44,25 +44,7 @@ public class RandomizeActionProcessor implements ActionProcessor {
 
     public RuleActionBean execute(RuleRunnerMode ruleRunnerMode, ExecutionMode executionMode, RuleActionBean ruleAction, ItemDataBean itemDataBean,
             String itemData, StudyBean currentStudy, UserAccountBean ub, Object... arguments) {
-
-        switch (executionMode) {
-        case DRY_RUN: {
-            if (ruleRunnerMode == RuleRunnerMode.DATA_ENTRY) {
-                return null;
-            } else {
-                return ruleAction;
-            }
-        }
-        case SAVE: {
-            if (ruleRunnerMode == RuleRunnerMode.IMPORT_DATA) {
-                return saveWithStatusUpdated(ruleAction, itemDataBean, itemData, currentStudy, ub);
-            } else {
-                return save(ruleAction, itemDataBean, itemData, currentStudy, ub);
-            }
-        }
-        default:
-            return ruleAction;
-        }
+        throw new UnsupportedOperationException("The internal randomization module has been decommissioned.");
     }
 
     private RuleActionBean saveWithStatusUpdated(RuleActionBean ruleAction, ItemDataBean itemDataBean, String itemData, StudyBean currentStudy, UserAccountBean ub) {
@@ -114,6 +96,12 @@ public class RandomizeActionProcessor implements ActionProcessor {
 
 
     private boolean mayProceed(String studyOid) throws Exception {
+        boolean randomizationEnabledVal = "true".equalsIgnoreCase(org.akaza.openclinica.dao.core.CoreResources.getField("randomization.enabled"));
+        if (!randomizationEnabledVal) {
+            logger.warn("Randomization action processor was triggered, but the internal randomization module has been decommissioned.");
+            return false;
+        }
+
         boolean accessPermission = false;
         StudyBean siteStudy = getStudy(studyOid);
         StudyBean study = getParentStudy(studyOid);

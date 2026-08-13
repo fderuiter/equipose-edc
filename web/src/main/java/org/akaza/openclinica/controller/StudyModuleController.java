@@ -416,7 +416,11 @@ public class StudyModuleController {
 
 
         // Load Randomization  information
-        String moduleManager = CoreResources.getField("moduleManager");
+        boolean randomizationEnabled = "true".equalsIgnoreCase(CoreResources.getField("randomization.enabled"));
+        String moduleManager = "";
+        if (randomizationEnabled) {
+            moduleManager = CoreResources.getField("moduleManager");
+        }
         map.addAttribute("moduleManager", moduleManager);
         if (moduleManager != null && !moduleManager.equals("")) {
 

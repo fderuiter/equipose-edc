@@ -79,8 +79,16 @@ public class ViewStudyServlet extends SecureController {
             if(participantStatusInOC=="") participantStatusInOC="disabled";
             if(randomizationStatusInOC=="") randomizationStatusInOC="disabled";
 
-            RandomizationRegistrar randomizationRegistrar = new RandomizationRegistrar();
-            SeRandomizationDTO seRandomizationDTO = randomizationRegistrar.getCachedRandomizationDTOObject(study.getOid(), false);
+            boolean randomizationEnabledVal = "true".equalsIgnoreCase(CoreResources.getField("randomization.enabled"));
+            SeRandomizationDTO seRandomizationDTO = null;
+            if (randomizationEnabledVal) {
+                try {
+                    RandomizationRegistrar randomizationRegistrar = new RandomizationRegistrar();
+                    seRandomizationDTO = randomizationRegistrar.getCachedRandomizationDTOObject(study.getOid(), false);
+                } catch (Exception e) {
+                    logger.warn("Failed to get randomization DTO: " + e.getMessage());
+                }
+            }
 
             if (seRandomizationDTO!=null && seRandomizationDTO.getStatus().equalsIgnoreCase("ACTIVE") && randomizationStatusInOC.equalsIgnoreCase("enabled")){
                 study.getStudyParameterConfig().setRandomization("enabled");
@@ -148,7 +156,11 @@ public class ViewStudyServlet extends SecureController {
                     def.setCrfNum(crfs.size());
 
                 }
-                String moduleManager = CoreResources.getField("moduleManager");
+                boolean randomizationEnabled = "true".equalsIgnoreCase(CoreResources.getField("randomization.enabled"));
+                String moduleManager = "";
+                if (randomizationEnabled) {
+                    moduleManager = CoreResources.getField("moduleManager");
+                }
                 request.setAttribute("moduleManager", moduleManager);
 
                 String portalURL = CoreResources.getField("portalURL");
