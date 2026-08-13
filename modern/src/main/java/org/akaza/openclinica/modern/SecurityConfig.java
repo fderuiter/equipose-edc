@@ -37,6 +37,9 @@ import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtException;
+
 import static org.springframework.security.config.Customizer.withDefaults;
 
 @Configuration
@@ -57,7 +60,7 @@ public class SecurityConfig {
 
         http
             .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers("/api/auth/token", "/api/auth/jwks.json", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()
+                .requestMatchers("/api/auth/token", "/api/auth/jwks.json", "/api/auth/config", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/actuator/**").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(withDefaults()))
@@ -110,7 +113,43 @@ public class SecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder(KeyPair keyPair) {
-        return NimbusJwtDecoder.withPublicKey((RSAPublicKey) keyPair.getPublic()).build();
+        JwtDecoder localDecoder = NimbusJwtDecoder.withPublicKey((RSAPublicKey) keyPair.getPublic()).build();
+        return new DynamicJwtDecoder(localDecoder);
+    }
+
+    private static class DynamicJwtDecoder implements JwtDecoder {
+        private final JwtDecoder localDecoder;
+        private final java.util.concurrent.ConcurrentHashMap<String, JwtDecoder> externalDecoders = new java.util.concurrent.ConcurrentHashMap<>();
+
+        public DynamicJwtDecoder(JwtDecoder localDecoder) {
+            this.localDecoder = localDecoder;
+        }
+
+        @Override
+        public Jwt decode(String token) throws JwtException {
+            String provider = System.getenv("OIDC_PROVIDER");
+            if (provider == null || provider.trim().isEmpty() || "local".equalsIgnoreCase(provider)) {
+                return localDecoder.decode(token);
+            }
+
+            String jwkSetUri = System.getenv("OIDC_JWK_SET_URI");
+            String issuerUri = System.getenv("OIDC_ISSUER_URI");
+
+            if ((jwkSetUri == null || jwkSetUri.trim().isEmpty()) && (issuerUri == null || issuerUri.trim().isEmpty())) {
+                return localDecoder.decode(token);
+            }
+
+            String lookupKey = jwkSetUri != null ? jwkSetUri : issuerUri;
+            JwtDecoder externalDecoder = externalDecoders.computeIfAbsent(lookupKey, key -> {
+                if (jwkSetUri != null && !jwkSetUri.trim().isEmpty()) {
+                    return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+                } else {
+                    return NimbusJwtDecoder.withIssuerLocation(issuerUri).build();
+                }
+            });
+
+            return externalDecoder.decode(token);
+        }
     }
 
     @Bean

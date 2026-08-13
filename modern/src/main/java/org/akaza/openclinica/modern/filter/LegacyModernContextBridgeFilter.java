@@ -78,13 +78,78 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                     }
                     org.akaza.openclinica.modern.security.TenantContext.setCurrentTenant(tenantId);
 
-                    userBean = new UserAccountBean();
-                    userBean.setName(username);
-                    if (claims.containsKey("user_id")) {
-                        userBean.setId(((Long) claims.get("user_id")).intValue());
+                    String claimKeyConfig = System.getProperty("OIDC_USER_IDENTIFIER_CLAIM");
+                    if (claimKeyConfig == null || claimKeyConfig.trim().isEmpty()) {
+                        claimKeyConfig = System.getenv("OIDC_USER_IDENTIFIER_CLAIM");
                     }
-                    if (claims.containsKey("active_study_id")) {
-                        userBean.setActiveStudyId(((Long) claims.get("active_study_id")).intValue());
+                    String[] candidateKeys;
+                    if (claimKeyConfig != null && !claimKeyConfig.trim().isEmpty()) {
+                        candidateKeys = claimKeyConfig.split("\\s*,\\s*");
+                    } else {
+                        candidateKeys = new String[]{"user_id", "sub", "preferred_username"};
+                    }
+
+                    String matchedClaimKey = null;
+                    Object userIdentifierObj = null;
+                    for (String candidate : candidateKeys) {
+                        if ("client_id".equalsIgnoreCase(candidate) 
+                            || "appid".equalsIgnoreCase(candidate) 
+                            || "azp".equalsIgnoreCase(candidate)
+                            || "client_id_claim".equalsIgnoreCase(candidate)) {
+                            continue;
+                        }
+                        Object value = claims.get(candidate);
+                        if (value != null && !String.valueOf(value).trim().isEmpty()) {
+                            matchedClaimKey = candidate;
+                            userIdentifierObj = value;
+                            break;
+                        }
+                    }
+
+                    if (userIdentifierObj == null) {
+                        logger.error("SECURITY ALERT: Configured user identifier claims " + java.util.Arrays.toString(candidateKeys) + " are missing or blank in the token.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Missing user identifier claim");
+                        return;
+                    }
+                    String userIdentifier = String.valueOf(userIdentifierObj);
+
+                    Object clientIdVal = claims.get("client_id");
+                    Object appidVal = claims.get("appid");
+                    Object azpVal = claims.get("azp");
+                    if ((clientIdVal != null && userIdentifier.equals(String.valueOf(clientIdVal)))
+                        || (appidVal != null && userIdentifier.equals(String.valueOf(appidVal)))
+                        || (azpVal != null && userIdentifier.equals(String.valueOf(azpVal)))) {
+                        logger.error("SECURITY ALERT: Resolved user identifier matches a client ID claim: " + userIdentifier + ". Rejecting to prevent account overwrites.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Invalid user identifier");
+                        return;
+                    }
+
+                    userBean = unifiedRepository.getUserAccountBeanByUserName(userIdentifier);
+                    if (userBean == null) {
+                        userBean = new UserAccountBean();
+                        userBean.setName(userIdentifier);
+                        if (claims.containsKey("user_id")) {
+                            try {
+                                userBean.setId(Integer.parseInt(String.valueOf(claims.get("user_id"))));
+                            } catch (Exception e) {
+                                userBean.setId(1);
+                            }
+                        } else {
+                            userBean.setId(1);
+                        }
+                        if (claims.containsKey("active_study_id")) {
+                            try {
+                                userBean.setActiveStudyId(Integer.parseInt(String.valueOf(claims.get("active_study_id"))));
+                            } catch (Exception e) {}
+                        }
+                    } else {
+                        if (claims.containsKey("active_study_id")) {
+                            try {
+                                userBean.setActiveStudyId(Integer.parseInt(String.valueOf(claims.get("active_study_id"))));
+                            } catch (Exception e) {}
+                        }
                     }
                 } else {
                     userBean = unifiedRepository.getUserAccountBeanByUserName(username);
@@ -159,9 +224,15 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                             return val;
                         } else if ("setAttribute".equals(methodName)) {
                             attributes.put((String) args[0], args[1]);
+                            if (originalSession != null) {
+                                originalSession.setAttribute((String) args[0], args[1]);
+                            }
                             return null;
                         } else if ("removeAttribute".equals(methodName)) {
                             attributes.remove(args[0]);
+                            if (originalSession != null) {
+                                originalSession.removeAttribute((String) args[0]);
+                            }
                             return null;
                         } else if ("getAttributeNames".equals(methodName)) {
                             return Collections.enumeration(attributes.keySet());

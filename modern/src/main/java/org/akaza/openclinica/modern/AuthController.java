@@ -71,4 +71,24 @@ public class AuthController {
         JWKSet jwkSet = new JWKSet(rsaKey);
         return jwkSet.toJSONObject();
     }
+
+    @GetMapping("/config")
+    public Map<String, Object> config() {
+        String provider = System.getenv("OIDC_PROVIDER");
+        String clientId = System.getenv("OIDC_CLIENT_ID");
+        String issuerUri = System.getenv("OIDC_ISSUER_URI");
+        String authorizationEndpoint = System.getenv("OIDC_AUTHORIZATION_ENDPOINT");
+        String scopes = System.getenv("OIDC_SCOPES");
+        if (scopes == null || scopes.trim().isEmpty()) {
+            scopes = "openid profile email";
+        }
+
+        return Map.of(
+            "oidcProvider", provider != null ? provider : "local",
+            "clientId", clientId != null ? clientId : "",
+            "issuerUri", issuerUri != null ? issuerUri : "",
+            "authorizationEndpoint", authorizationEndpoint != null ? authorizationEndpoint : "",
+            "scopes", scopes
+        );
+    }
 }
