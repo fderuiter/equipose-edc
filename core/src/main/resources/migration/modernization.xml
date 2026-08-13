@@ -143,7 +143,7 @@
         </insert>
     </changeSet>
 
-    <changeSet author="modernization" id="create_notification_outbox_seq" dbms="postgresql, oracle">
+    <changeSet author="modernization" id="create_notification_outbox_seq" dbms="oracle">
         <createSequence sequenceName="notification_outbox_id_seq" />
     </changeSet>
 
