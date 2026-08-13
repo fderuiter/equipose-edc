@@ -59,9 +59,18 @@ public class OidcBridgeTests {
         TenantContext.setBypass(false);
     }
 
+    private LegacyModernContextBridgeFilter createFilter() {
+        return new LegacyModernContextBridgeFilter(dataSource, unifiedRepository) {
+            @Override
+            protected void provisionOrUpdateUser(String username, Map<String, Object> claims) throws Exception {
+                // No-op in unit tests to avoid complex database dependency
+            }
+        };
+    }
+
     @Test
     public void testFilterWithMissingUserIdentifierClaim() throws Exception {
-        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        LegacyModernContextBridgeFilter filter = createFilter();
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("tenant_id", "tenant-a");
@@ -82,7 +91,7 @@ public class OidcBridgeTests {
 
     @Test
     public void testFilterWithValidUserIdentifierButNoDatabaseUser() throws Exception {
-        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        LegacyModernContextBridgeFilter filter = createFilter();
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("tenant_id", "tenant-a");
@@ -109,7 +118,7 @@ public class OidcBridgeTests {
 
     @Test
     public void testFilterWithValidUserIdentifierAndDatabaseUser() throws Exception {
-        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        LegacyModernContextBridgeFilter filter = createFilter();
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("tenant_id", "tenant-a");
@@ -138,7 +147,7 @@ public class OidcBridgeTests {
     public void testFilterWithCustomClaimMapping() throws Exception {
         System.setProperty("OIDC_USER_IDENTIFIER_CLAIM", "custom_username,sub");
         try {
-            LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+            LegacyModernContextBridgeFilter filter = createFilter();
 
             Map<String, Object> claims = new HashMap<>();
             claims.put("tenant_id", "tenant-a");
@@ -167,7 +176,7 @@ public class OidcBridgeTests {
 
     @Test
     public void testFilterWithSubClaimFallback() throws Exception {
-        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        LegacyModernContextBridgeFilter filter = createFilter();
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("tenant_id", "tenant-a");
@@ -193,7 +202,7 @@ public class OidcBridgeTests {
 
     @Test
     public void testFilterWithClientIdProtection() throws Exception {
-        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        LegacyModernContextBridgeFilter filter = createFilter();
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("tenant_id", "tenant-a");
@@ -216,7 +225,7 @@ public class OidcBridgeTests {
 
     @Test
     public void testTraditionalLocalLoginMockSession() throws Exception {
-        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        LegacyModernContextBridgeFilter filter = createFilter();
 
         UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken("local_user", "password", java.util.Collections.emptyList());
         SecurityContextHolder.getContext().setAuthentication(token);

@@ -371,7 +371,7 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
         }
     }
 
-    private void provisionOrUpdateUser(String username, Map<String, Object> claims) throws Exception {
+    protected void provisionOrUpdateUser(String username, Map<String, Object> claims) throws Exception {
         String firstName = getClaimAsString(claims, "given_name", "firstName", "first_name", "givenName");
         if (firstName == null || firstName.isEmpty()) firstName = "First";
 
