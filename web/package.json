@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest run --environment jsdom",
-    "build": "vite build && node inject-bundle.js",
+    "build": "node ../utils/compile-tokens.js && vite build && node inject-bundle.js",
     "docs": "typedoc --plugin typedoc-plugin-markdown --readme none --entryFileName modules.md src/main/webapp/js/components/*.jsx --out ../docs/reference/frontend-api",
     "postinstall": "node security-audit.js",
     "lint": "eslint . --max-warnings=0",

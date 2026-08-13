@@ -1,0 +1,42 @@
+{
+  "theme": {
+    "extend": {
+      "colors": {
+        "primary": {
+          "light": "#0056b3",
+          "dark": "#90caf9"
+        },
+        "text": {
+          "light": "#212121",
+          "dark": "#ffffff"
+        },
+        "background": {
+          "light": "#ffffff",
+          "dark": "#121212"
+        },
+        "border": {
+          "light": "#888888",
+          "dark": "#424242"
+        },
+        "focus": {
+          "light": "#005fcc",
+          "dark": "#90caf9"
+        },
+        "highlight": {
+          "light": "#f9f9f9",
+          "dark": "#1e1e1e"
+        },
+        "error": {
+          "light": "#d32f2f",
+          "dark": "#f44336"
+        }
+      },
+      "spacing": {
+        "sm": "0.5rem",
+        "md": "1rem",
+        "lg": "1.5rem",
+        "xl": "2rem"
+      }
+    }
+  }
+}

@@ -35,7 +35,7 @@ test.describe('Printable CRF', () => {
           window.app_investigatorSignatureLabel = 'Investigator Signature';
           window.app_meaning_of_signatureLabel = 'Meaning of Signature';
         </script>
-        <script src="/OpenClinica-web/dist/${mainScript}"></script>
+        <script type="module" src="/OpenClinica-web/dist/${mainScript}"></script>
         <style>
           .spinner { display: none; }
           .sr-only {
@@ -52,6 +52,7 @@ test.describe('Printable CRF', () => {
         </style>
        </head>
        <body>
+         <div id="printCRFContainer"></div>
          <div id="menuContainer"></div>
          <script>
            setTimeout(() => {
@@ -64,7 +65,7 @@ test.describe('Printable CRF', () => {
       route.fulfill({ contentType: 'text/html', body: mockHtml });
     });
 
-    await page.route('**/dist/assets/*.js', async (route) => {
+    await page.route('**/assets/*', async (route) => {
       const url = new URL(route.request().url());
       const fileName = path.basename(url.pathname);
       const assetsDir = path.join(
@@ -73,8 +74,11 @@ test.describe('Printable CRF', () => {
       );
 
       try {
-        const bundle = fs.readFileSync(path.join(assetsDir, fileName), 'utf8');
-        route.fulfill({ contentType: 'application/javascript', body: bundle });
+        const fileContent = fs.readFileSync(path.join(assetsDir, fileName));
+        const contentType = fileName.endsWith('.css')
+          ? 'text/css'
+          : 'application/javascript';
+        route.fulfill({ contentType, body: fileContent });
       } catch {
         route.abort();
       }

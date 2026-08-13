@@ -10,6 +10,10 @@ export default defineConfig({
       transform(code, id) {
         if (id.includes('prototype.js')) {
           let patched = code.replace(/\}\)\(this\);/g, '})(window);');
+          patched = patched.replace(
+            'if (GLOBAL.Event) Object.extend(window.Event, Event);',
+            'if (GLOBAL.Event) { var clone = Object.assign({}, Event); delete clone.prototype; Object.extend(window.Event, clone); }'
+          );
           patched += `\nwindow.Prototype = Prototype;
 window.Class = Class;
 if (typeof $ !== 'undefined') window.$ = $;

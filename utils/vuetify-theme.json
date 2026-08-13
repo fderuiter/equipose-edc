@@ -1,0 +1,43 @@
+{
+  "theme": {
+    "defaultTheme": "light",
+    "themes": {
+      "light": {
+        "dark": false,
+        "colors": {
+          "primary": "#0056b3",
+          "background": "#ffffff",
+          "surface": "#ffffff",
+          "error": "#d32f2f",
+          "info": "#005fcc",
+          "success": "#0056b3",
+          "warning": "#f9f9f9"
+        },
+        "variables": {
+          "spacing-sm": "0.5rem",
+          "spacing-md": "1rem",
+          "spacing-lg": "1.5rem",
+          "spacing-xl": "2rem"
+        }
+      },
+      "dark": {
+        "dark": true,
+        "colors": {
+          "primary": "#90caf9",
+          "background": "#121212",
+          "surface": "#121212",
+          "error": "#f44336",
+          "info": "#90caf9",
+          "success": "#90caf9",
+          "warning": "#1e1e1e"
+        },
+        "variables": {
+          "spacing-sm": "0.5rem",
+          "spacing-md": "1rem",
+          "spacing-lg": "1.5rem",
+          "spacing-xl": "2rem"
+        }
+      }
+    }
+  }
+}
