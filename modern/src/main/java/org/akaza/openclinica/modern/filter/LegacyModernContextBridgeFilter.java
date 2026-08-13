@@ -258,10 +258,18 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                             return method.invoke(originalSession, args);
                         }
                         
-                        if ("getId".equals(methodName)) return "stateless-session";
-                        if ("getCreationTime".equals(methodName)) return System.currentTimeMillis();
-                        if ("getLastAccessedTime".equals(methodName)) return System.currentTimeMillis();
-                        if ("getServletContext".equals(methodName)) return super.getServletContext();
+                        if ("getId".equals(methodName)) {
+                            return "stateless-session";
+                        }
+                        if ("getCreationTime".equals(methodName)) {
+                            return System.currentTimeMillis();
+                        }
+                        if ("getLastAccessedTime".equals(methodName)) {
+                            return System.currentTimeMillis();
+                        }
+                        if ("getServletContext".equals(methodName)) {
+                            return super.getServletContext();
+                        }
                         
                         if (method.getReturnType().equals(Void.TYPE)) {
                             return null;

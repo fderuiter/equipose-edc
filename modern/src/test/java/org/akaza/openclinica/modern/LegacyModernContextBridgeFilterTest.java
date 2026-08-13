@@ -84,6 +84,38 @@ public class LegacyModernContextBridgeFilterTest {
     }
 
     @Test
+    public void testDoFilter_JwtAuthentication_Success_IntegerClaim() throws Exception {
+        String username = "testuser_int";
+        JwtAuthenticationToken jwtAuth = mock(JwtAuthenticationToken.class);
+        when(jwtAuth.getName()).thenReturn(username);
+        when(jwtAuth.isAuthenticated()).thenReturn(true);
+        when(jwtAuth.getPrincipal()).thenReturn(username);
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("active_study_id", 45); // Integer claim, not Long
+        when(jwtAuth.getTokenAttributes()).thenReturn(claims);
+
+        UserAccountBean userBean = new UserAccountBean();
+        userBean.setId(10);
+        userBean.setName(username);
+        userBean.setActiveStudyId(1);
+
+        when(unifiedRepository.getUserAccountBeanByUserName(username)).thenReturn(userBean);
+
+        StudyBean studyBean = new StudyBean();
+        studyBean.setId(45);
+        when(unifiedRepository.getStudyBean(45)).thenReturn(studyBean);
+
+        SecurityContextHolder.getContext().setAuthentication(jwtAuth);
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(45, userBean.getActiveStudyId());
+        verify(chain).doFilter(any(HttpServletRequest.class), eq(response));
+        verify(response, never()).sendError(anyInt(), anyString());
+    }
+
+    @Test
     public void testDoFilter_JwtAuthentication_UserNotFound() throws Exception {
         String username = "missinguser";
         JwtAuthenticationToken jwtAuth = mock(JwtAuthenticationToken.class);
