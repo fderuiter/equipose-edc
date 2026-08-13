@@ -264,7 +264,7 @@ public class UserAccountController {
 		createdUserAccountBean.setEmail(email);
 		createdUserAccountBean.setEnableApiKey(true);
 		createdUserAccountBean.setPasswd(passwordHash);
-		createdUserAccountBean.setRunWebservices(authorizeSoap);
+		createdUserAccountBean.setRunWebservices(false);
 
 		createdUserAccountBean = addActiveStudyRole(createdUserAccountBean, study.getId(), roleName, ownerUserAccount);
 		createdUserAccountBean.addUserType(userType);

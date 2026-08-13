@@ -180,31 +180,30 @@ public class UserAccountDAO extends AuditableEntityDAO {
 
         variables.put(new Integer(16), uab.getAccountNonLocked());
         variables.put(new Integer(17), uab.getLockCounter());
-        variables.put(new Integer(18), uab.getRunWebservices());
 
         if (uab.getAccessCode() == null || uab.getAccessCode().equals("") || uab.getAccessCode().equals("null")) {
-            nullVars.put(new Integer(19), new Integer(TypeNames.STRING));
-            variables.put(new Integer(19), null);
+            nullVars.put(new Integer(18), new Integer(TypeNames.STRING));
+            variables.put(new Integer(18), null);
         } else {
-            variables.put(new Integer(19), uab.getAccessCode());
+            variables.put(new Integer(18), uab.getAccessCode());
         }
         
         if (uab.getTime_zone() == null || uab.getTime_zone().equals("")) {
-            nullVars.put(new Integer(20), new Integer(TypeNames.STRING));
-            variables.put(new Integer(20), null);
+            nullVars.put(new Integer(19), new Integer(TypeNames.STRING));
+            variables.put(new Integer(19), null);
         } else {
-            variables.put(new Integer(20), uab.getTime_zone());
+            variables.put(new Integer(19), uab.getTime_zone());
         }
-        variables.put(new Integer(21), uab.isEnableApiKey());
+        variables.put(new Integer(20), uab.isEnableApiKey());
         
         if (uab.getApiKey() == null || uab.getApiKey().equals("")) {
-            nullVars.put(new Integer(22), new Integer(TypeNames.STRING));
-            variables.put(new Integer(22), null);        
+            nullVars.put(new Integer(21), new Integer(TypeNames.STRING));
+            variables.put(new Integer(21), null);        
         }else{
-        variables.put(new Integer(22), uab.getApiKey());
+        variables.put(new Integer(21), uab.getApiKey());
         }
         
-        variables.put(new Integer(23), new Integer(uab.getId()));
+        variables.put(new Integer(22), new Integer(uab.getId()));
 
 
         String sql = digester.getQuery("update");
@@ -306,10 +305,9 @@ public class UserAccountDAO extends AuditableEntityDAO {
             variables.put(new Integer(14), new Integer(UserType.USER.getId()));
         }
 
-        variables.put(new Integer(15), uab.getRunWebservices());
-        variables.put(new Integer(16), uab.getAccessCode());
-        variables.put(new Integer(17), uab.isEnableApiKey());
-        variables.put(new Integer(18), uab.getApiKey());
+        variables.put(new Integer(15), uab.getAccessCode());
+        variables.put(new Integer(16), uab.isEnableApiKey());
+        variables.put(new Integer(17), uab.getApiKey());
 
         
         boolean success = true;
@@ -451,7 +449,8 @@ public class UserAccountDAO extends AuditableEntityDAO {
         eb.setEnabled(((Boolean) hm.get("enabled")).booleanValue());
         eb.setAccountNonLocked(((Boolean) hm.get("account_non_locked")).booleanValue());
         eb.setLockCounter(((Integer) hm.get("lock_counter")));
-        eb.setRunWebservices(((Boolean) hm.get("run_webservices")).booleanValue());
+        Boolean runWebservices = (Boolean) hm.get("run_webservices");
+        eb.setRunWebservices(runWebservices != null ? runWebservices.booleanValue() : false);
         eb.setAccessCode(accessCode);
         eb.setTime_zone(time_zone);
         eb.setEnableApiKey(enableApiKey);
