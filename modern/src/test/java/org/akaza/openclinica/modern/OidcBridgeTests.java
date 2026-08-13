@@ -97,14 +97,10 @@ public class OidcBridgeTests {
         when(request.getRequestURI()).thenReturn("/api/test");
         when(unifiedRepository.getUserAccountBeanByUserName("john_sso")).thenReturn(null);
 
-        doAnswer(invocation -> {
-            assertEquals("tenant-a", TenantContext.getCurrentTenant());
-            return null;
-        }).when(filterChain).doFilter(any(), any());
-
         filter.doFilter(request, response, filterChain);
 
-        verify(filterChain).doFilter(any(), any());
+        verify(response).sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized - User account not found");
+        verify(filterChain, never()).doFilter(any(), any());
     }
 
     @Test

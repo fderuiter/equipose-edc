@@ -91,6 +91,8 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
 
                     String matchedClaimKey = null;
                     Object userIdentifierObj = null;
+
+                    // 1. First pass: try to find a candidate claim that maps to an existing, valid user in the database.
                     for (String candidate : candidateKeys) {
                         if ("client_id".equalsIgnoreCase(candidate) 
                             || "appid".equalsIgnoreCase(candidate) 
@@ -100,9 +102,39 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                         }
                         Object value = claims.get(candidate);
                         if (value != null && !String.valueOf(value).trim().isEmpty()) {
-                            matchedClaimKey = candidate;
-                            userIdentifierObj = value;
-                            break;
+                            String potentialUsername = String.valueOf(value);
+                            Object clientIdVal = claims.get("client_id");
+                            Object appidVal = claims.get("appid");
+                            Object azpVal = claims.get("azp");
+                            if ((clientIdVal != null && potentialUsername.equals(String.valueOf(clientIdVal)))
+                                || (appidVal != null && potentialUsername.equals(String.valueOf(appidVal)))
+                                || (azpVal != null && potentialUsername.equals(String.valueOf(azpVal)))) {
+                                continue;
+                            }
+                            UserAccountBean u = unifiedRepository.getUserAccountBeanByUserName(potentialUsername);
+                            if (u != null && u.getId() > 0) {
+                                matchedClaimKey = candidate;
+                                userIdentifierObj = value;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 2. Second pass: fallback if no existing database user matched - pick the first non-null/non-blank candidate key.
+                    if (userIdentifierObj == null) {
+                        for (String candidate : candidateKeys) {
+                            if ("client_id".equalsIgnoreCase(candidate) 
+                                || "appid".equalsIgnoreCase(candidate) 
+                                || "azp".equalsIgnoreCase(candidate)
+                                || "client_id_claim".equalsIgnoreCase(candidate)) {
+                                continue;
+                            }
+                            Object value = claims.get(candidate);
+                            if (value != null && !String.valueOf(value).trim().isEmpty()) {
+                                matchedClaimKey = candidate;
+                                userIdentifierObj = value;
+                                break;
+                            }
                         }
                     }
 
@@ -127,28 +159,14 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                     }
 
                     userBean = unifiedRepository.getUserAccountBeanByUserName(userIdentifier);
-                    if (userBean == null) {
-                        userBean = new UserAccountBean();
-                        userBean.setName(userIdentifier);
-                        if (claims.containsKey("user_id")) {
-                            try {
-                                userBean.setId(Integer.parseInt(String.valueOf(claims.get("user_id"))));
-                            } catch (Exception e) {
-                                userBean.setId(1);
-                            }
-                        } else {
-                            userBean.setId(1);
-                        }
-                        if (claims.containsKey("active_study_id")) {
-                            try {
-                                userBean.setActiveStudyId(Integer.parseInt(String.valueOf(claims.get("active_study_id"))));
-                            } catch (Exception e) {}
-                        }
-                    } else {
-                        if (claims.containsKey("active_study_id")) {
-                            try {
-                                userBean.setActiveStudyId(Integer.parseInt(String.valueOf(claims.get("active_study_id"))));
-                            } catch (Exception e) {}
+                    if (userBean == null || userBean.getId() == 0) {
+                        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized - User account not found");
+                        return;
+                    }
+                    if (claims.containsKey("active_study_id")) {
+                        Object activeStudyIdObj = claims.get("active_study_id");
+                        if (activeStudyIdObj instanceof Number) {
+                            userBean.setActiveStudyId(((Number) activeStudyIdObj).intValue());
                         }
                     }
                 } else {
