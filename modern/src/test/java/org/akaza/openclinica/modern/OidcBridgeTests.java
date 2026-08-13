@@ -47,6 +47,66 @@ public class OidcBridgeTests {
         responseOutput = new StringWriter();
         when(response.getWriter()).thenReturn(new PrintWriter(responseOutput));
 
+        java.sql.Connection connection = mock(java.sql.Connection.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.prepareStatement(anyString())).thenAnswer(invocation -> {
+            String sql = invocation.getArgument(0);
+            java.sql.PreparedStatement ps = mock(java.sql.PreparedStatement.class);
+            java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+            when(ps.executeQuery()).thenReturn(rs);
+
+            final String[] queriedUsername = new String[1];
+            doAnswer(inv -> {
+                queriedUsername[0] = inv.getArgument(1);
+                return null;
+            }).when(ps).setString(eq(1), anyString());
+
+            when(rs.next()).thenAnswer(inv -> {
+                if (sql.contains("SELECT user_id FROM user_account WHERE user_name")) {
+                    String username = queriedUsername[0];
+                    if (username != null) {
+                        UserAccountBean bean = unifiedRepository.getUserAccountBeanByUserName(username);
+                        return bean != null;
+                    }
+                    return false;
+                }
+                if (sql.contains("SELECT nextval")) {
+                    return true;
+                }
+                if (sql.contains("SELECT study_id FROM study ORDER BY study_id")) {
+                    return true;
+                }
+                if (sql.contains("SELECT 1 FROM study WHERE study_id")) {
+                    return true;
+                }
+                if (sql.contains("SELECT 1 FROM study_user_role")) {
+                    return true;
+                }
+                return false;
+            });
+
+            when(rs.getInt(1)).thenAnswer(inv -> {
+                if (sql.contains("SELECT user_id FROM user_account WHERE user_name")) {
+                    String username = queriedUsername[0];
+                    if (username != null) {
+                        UserAccountBean bean = unifiedRepository.getUserAccountBeanByUserName(username);
+                        if (bean != null) {
+                            return bean.getId();
+                        }
+                    }
+                }
+                if (sql.contains("SELECT nextval")) {
+                    return 42;
+                }
+                if (sql.contains("SELECT study_id FROM study ORDER BY study_id")) {
+                    return 1;
+                }
+                return 0;
+            });
+
+            return ps;
+        });
+
         SecurityContextHolder.clearContext();
         TenantContext.setCurrentTenant(null);
         TenantContext.setBypass(false);
