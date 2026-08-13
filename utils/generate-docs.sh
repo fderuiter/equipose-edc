@@ -227,7 +227,7 @@ if ! python3 -m mkdocs build; then
 fi
 
 # Validate that no placeholders remain in documentation and final outputs
-UNRESOLVED=$(find docs core web site -type f \( -name "*.md" -o -name "*.html" \) -not -path "*/node_modules/*" -exec grep -lE '\$\{[a-zA-Z0-9._]+\}' {} + || true)
+UNRESOLVED=$(find docs core web site -type f \( -name "*.md" -o -name "*.html" \) -not -path "*/node_modules/*" -not -path "*/target/*" -exec grep -lE '\$\{[a-zA-Z0-9._]+\}' {} + || true)
 if [ ! -z "$UNRESOLVED" ]; then
     echo "Error: Unreplaced placeholders found in the following files:"
     echo "$UNRESOLVED"

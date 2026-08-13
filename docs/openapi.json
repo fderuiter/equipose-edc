@@ -750,7 +750,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponseListString"
+                  "$ref": "#/components/schemas/ApiResponseListStagedRecordDto"
                 }
               }
             }
@@ -1096,6 +1096,15 @@
           },
           "item_value": {
             "type": "string"
+          },
+          "target_study": {
+            "type": "string"
+          },
+          "target_form_version": {
+            "type": "string"
+          },
+          "target_field": {
+            "type": "string"
           }
         }
       },
@@ -1146,13 +1155,13 @@
           }
         }
       },
-      "ApiResponseListString": {
+      "ApiResponseListStagedRecordDto": {
         "type": "object",
         "properties": {
           "data": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/StagedRecordDto"
             }
           },
           "errors": {
@@ -1166,6 +1175,20 @@
             "additionalProperties": {
               "type": "object"
             }
+          }
+        }
+      },
+      "StagedRecordDto": {
+        "type": "object",
+        "properties": {
+          "record_id": {
+            "type": "string"
+          },
+          "target_study": {
+            "type": "string"
+          },
+          "target_form_version": {
+            "type": "string"
           }
         }
       },

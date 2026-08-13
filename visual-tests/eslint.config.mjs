@@ -4,7 +4,12 @@ import globals from 'globals';
 export default [
   js.configs.recommended,
   {
-    ignores: ['node_modules/**', '**/dist/**', '*-snapshots/**'],
+    ignores: [
+      'node_modules/**',
+      '**/target/**',
+      '**/dist/**',
+      '*-snapshots/**',
+    ],
   },
   {
     files: ['**/*.js'],
