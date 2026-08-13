@@ -138,8 +138,8 @@ public class OdmController {
             }
 
             String auditSql = "INSERT INTO audit_log_event " +
-                "(audit_date, audit_table, entity_id, entity_name, reason_for_change, old_value, new_value, audit_log_event_type_id) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                "(audit_id, audit_date, audit_table, entity_id, entity_name, reason_for_change, old_value, new_value, audit_log_event_type_id) " +
+                "VALUES (nextval('audit_log_event_audit_id_seq'), ?, ?, ?, ?, ?, ?, ?, ?)";
             
             jdbcTemplate.update(auditSql, 
                 new Date(),
