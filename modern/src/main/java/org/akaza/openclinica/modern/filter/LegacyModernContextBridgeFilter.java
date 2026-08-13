@@ -35,6 +35,7 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        logger.warn("DEBUG FILTER STARTED: request URI = " + request.getRequestURI() + ", auth = " + SecurityContextHolder.getContext().getAuthentication());
         
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
@@ -44,11 +45,39 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
         try {
             if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
                 String username = authentication.getName();
+                logger.warn("DEBUG AUTH CLASS: " + authentication.getClass().getName() + ", username: " + username);
                 
+                if ("service_account".equals(username)) {
+                    org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
+                }
+
                 UserAccountBean userBean = null;
                 if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) {
                     org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth = (org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) authentication;
                     Map<String, Object> claims = jwtAuth.getTokenAttributes();
+                    
+                    // Validate tenant ID claim
+                    Object tenantIdObj = claims.get("tenant_id");
+                    logger.warn("DEBUG JWT: tenantIdObj = " + tenantIdObj + ", claims = " + claims);
+                    if (tenantIdObj == null) {
+                        logger.warn("DEBUG JWT: tenantIdObj is null, rejecting with 403");
+                        logger.error("SECURITY ALERT: User identity token lacks a valid tenant identifier.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Missing tenant identifier");
+                        return;
+                    }
+                    String tenantId = String.valueOf(tenantIdObj);
+                    boolean whitelisted = org.akaza.openclinica.modern.security.TenantContext.isWhitelisted(tenantId);
+                    logger.warn("DEBUG JWT: tenantId = " + tenantId + ", whitelisted = " + whitelisted);
+                    if (!whitelisted) {
+                        logger.warn("DEBUG JWT: tenantId is not whitelisted, rejecting with 403");
+                        logger.error("SECURITY ALERT: Tenant identifier " + tenantId + " is not whitelisted.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Tenant not whitelisted");
+                        return;
+                    }
+                    org.akaza.openclinica.modern.security.TenantContext.setCurrentTenant(tenantId);
+
                     userBean = new UserAccountBean();
                     userBean.setName(username);
                     if (claims.containsKey("user_id")) {
@@ -61,21 +90,26 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                     userBean = unifiedRepository.getUserAccountBeanByUserName(username);
                 }
                 
-                if (userBean != null && userBean.getId() > 0) {
-                    requestToChain = new StatelessSessionRequestWrapper(request);
-                    HttpSession session = requestToChain.getSession(true);
-                    session.setAttribute("userBean", userBean);
-                    
-                    if (userBean.getActiveStudyId() > 0) {
-                        StudyBean studyBean = unifiedRepository.getStudyBean(userBean.getActiveStudyId());
-                        if (studyBean != null && studyBean.getId() > 0) {
-                            session.setAttribute("studyBean", studyBean);
-                            session.setAttribute("study", studyBean);
-                        }
+                if (userBean != null) {
+                    if (userBean.isSysAdmin()) {
+                        org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
                     }
-                    
-                    MDC.put(LoggingConstants.USERNAME, username);
-                    mdcSet = true;
+                    if (userBean.getId() > 0) {
+                        requestToChain = new StatelessSessionRequestWrapper(request);
+                        HttpSession session = requestToChain.getSession(true);
+                        session.setAttribute("userBean", userBean);
+                        
+                        if (userBean.getActiveStudyId() > 0) {
+                            StudyBean studyBean = unifiedRepository.getStudyBean(userBean.getActiveStudyId());
+                            if (studyBean != null && studyBean.getId() > 0) {
+                                session.setAttribute("studyBean", studyBean);
+                                session.setAttribute("study", studyBean);
+                            }
+                        }
+                        
+                        MDC.put(LoggingConstants.USERNAME, username);
+                        mdcSet = true;
+                    }
                 }
             }
 
@@ -84,6 +118,7 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
             if (mdcSet) {
                 MDC.remove(LoggingConstants.USERNAME);
             }
+            org.akaza.openclinica.modern.security.TenantContext.clear();
         }
     }
 

@@ -34,7 +34,9 @@ public class AuthController {
     }
 
     @PostMapping("/token")
-    public String token(Authentication authentication) {
+    public String token(
+            @org.springframework.web.bind.annotation.RequestParam(value = "tenant_id", required = false) String tenantId,
+            Authentication authentication) {
         Instant now = Instant.now();
         // 10 hours token lifetime
         long expiry = 36000L;
@@ -52,6 +54,9 @@ public class AuthController {
         if (userBean != null) {
             claimsBuilder.claim("user_id", (long) userBean.getId());
             claimsBuilder.claim("active_study_id", (long) userBean.getActiveStudyId());
+        }
+        if (tenantId != null) {
+            claimsBuilder.claim("tenant_id", tenantId);
         }
         
         JwtClaimsSet claims = claimsBuilder.build();

@@ -102,6 +102,7 @@ public class Study   extends DataMapDomainObject {
 	private List<EventDefinitionCrf> eventDefinitionCrfs;
 	private List<DiscrepancyNote> discrepancyNotes ;
 	private List<StudyModuleStatus> studyModuleStatuses ;
+	private String tenantId;
 	private Integer version;
 
 	public Study() {
@@ -808,5 +809,13 @@ public class Study   extends DataMapDomainObject {
 		this.studyModuleStatuses = studyModuleStatuses;
 	}*/
 
-	
+	@Column(name = "tenant_id", length = 255)
+	public String getTenantId() {
+		return this.tenantId;
+	}
+
+	public void setTenantId(String tenantId) {
+		this.tenantId = tenantId;
+	}
+
 }
