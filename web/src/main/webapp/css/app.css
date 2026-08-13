@@ -1,25 +1,4 @@
-:root {
-  --primary-color: #0056b3;
-  --text-color: #212121;
-  --bg-color: #ffffff;
-  --border-color: #888888;
-  --focus-color: #005fcc;
-  --highlight-color: #f9f9f9;
-  --error-color: #d32f2f;
-
-  --font-base: 1rem;
-  --font-h1: 1.5rem;
-  --font-h2: 1.25rem;
-  --font-h3: 1.125rem;
-  --font-h4: 1rem;
-
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-
-  --fluid-width: 100%;
-}
+@import './shared-theme.css';
 body {
   font-family: Tahoma, Arial, Helvetica, Sans-Serif;
   margin-left: 0.625rem;

@@ -15,7 +15,8 @@
 // $Id: calendar.js,v 1.51 2005/03/07 16:44:31 mishoo Exp $
 
 /** The Calendar object constructor. */
-Calendar = function (firstDayOfWeek, dateStr, onSelected, onClose) {
+var Calendar;
+window.Calendar = Calendar = function (firstDayOfWeek, dateStr, onSelected, onClose) {
   // member variables
   this.activeDiv = null;
   this.currentDateEl = null;

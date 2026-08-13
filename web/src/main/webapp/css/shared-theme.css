@@ -1,0 +1,35 @@
+/* Automatically generated from tokens.json - DO NOT EDIT MANUALLY */
+
+:root {
+  --primary-color: #0056b3;
+  --text-color: #212121;
+  --bg-color: #ffffff;
+  --border-color: #888888;
+  --focus-color: #005fcc;
+  --highlight-color: #f9f9f9;
+  --error-color: #d32f2f;
+
+  --font-base: 1rem;
+  --font-h1: 1.5rem;
+  --font-h2: 1.25rem;
+  --font-h3: 1.125rem;
+  --font-h4: 1rem;
+
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --fluid-width: 100%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary-color: #90caf9;
+    --text-color: #ffffff;
+    --bg-color: #121212;
+    --border-color: #424242;
+    --focus-color: #90caf9;
+    --highlight-color: #1e1e1e;
+    --error-color: #f44336;
+  }
+}

@@ -1,6 +1,6 @@
 {
-  "_legacy-vendor-CIKnzzFs.js": {
-    "file": "assets/legacy-vendor-CIKnzzFs.js",
+  "_legacy-vendor-BY2wvHHh.js": {
+    "file": "assets/legacy-vendor-BY2wvHHh.js",
     "name": "legacy-vendor",
     "imports": [
       "_rolldown-runtime-BgaNhQyE.js"
@@ -35,7 +35,7 @@
     ]
   },
   "src/main/webapp/js/components/CRFRenderer.jsx": {
-    "file": "assets/CRFRenderer-DquC_lq5.js",
+    "file": "assets/CRFRenderer-D6oYdX56.js",
     "name": "CRFRenderer",
     "src": "src/main/webapp/js/components/CRFRenderer.jsx",
     "isDynamicEntry": true,
@@ -50,7 +50,7 @@
     ]
   },
   "src/main/webapp/js/components/ErrorBoundary.jsx": {
-    "file": "assets/ErrorBoundary-DcCj5BfR.js",
+    "file": "assets/ErrorBoundary-D9FQEkbL.js",
     "name": "ErrorBoundary",
     "src": "src/main/webapp/js/components/ErrorBoundary.jsx",
     "isDynamicEntry": true,
@@ -61,7 +61,7 @@
     ]
   },
   "src/main/webapp/js/components/Navigation.jsx": {
-    "file": "assets/Navigation-zVZxOPUe.js",
+    "file": "assets/Navigation-0Jpj8ACj.js",
     "name": "Navigation",
     "src": "src/main/webapp/js/components/Navigation.jsx",
     "isDynamicEntry": true,
@@ -75,13 +75,13 @@
     ]
   },
   "src/main/webapp/js/main.js": {
-    "file": "assets/main-BKgguuM6.js",
+    "file": "assets/main-D81qjrNv.js",
     "name": "main",
     "src": "src/main/webapp/js/main.js",
     "isEntry": true,
     "imports": [
       "_rolldown-runtime-BgaNhQyE.js",
-      "_legacy-vendor-CIKnzzFs.js",
+      "_legacy-vendor-BY2wvHHh.js",
       "_vendor-BkOcdPCZ.js"
     ],
     "dynamicImports": [
