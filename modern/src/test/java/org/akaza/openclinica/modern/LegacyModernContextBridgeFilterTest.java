@@ -93,6 +93,8 @@ public class LegacyModernContextBridgeFilterTest {
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("active_study_id", 45); // Integer claim, not Long
+        claims.put("tenant_id", "tenant-a");
+        claims.put("user_id", username);
         when(jwtAuth.getTokenAttributes()).thenReturn(claims);
 
         UserAccountBean userBean = new UserAccountBean();
