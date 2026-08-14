@@ -44,13 +44,7 @@ public class LegacyMigrationTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        // Drop existing tables and sequences to avoid state leakage from other tests sharing the cached context
-        jdbcTemplate.execute("DROP TABLE IF EXISTS authorities CASCADE");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS user_account CASCADE");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS study CASCADE");
-        jdbcTemplate.execute("DROP SEQUENCE IF EXISTS user_account_user_id_seq");
-
-        // Initialize required tables and sequences in H2 in-memory DB for the tests
+        // Initialize required tables and sequences in H2 in-memory DB if they do not exist
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS study (" +
                 "    study_id INT PRIMARY KEY," +
                 "    name VARCHAR(255)" +
@@ -87,11 +81,23 @@ public class LegacyMigrationTest {
                 "    authority VARCHAR(255)" +
                 ")");
 
-        jdbcTemplate.execute("CREATE SEQUENCE IF NOT EXISTS user_account_user_id_seq START WITH 1");
+        jdbcTemplate.execute("CREATE SEQUENCE IF NOT EXISTS user_account_user_id_seq START WITH 10000");
+        try {
+            jdbcTemplate.execute("ALTER SEQUENCE user_account_user_id_seq RESTART WITH 10000");
+        } catch (Exception e) {
+            // Ignore if the database/mode does not support sequence restart
+        }
 
-        // Seed default study
-        jdbcTemplate.execute("DELETE FROM study WHERE study_id = 1");
-        jdbcTemplate.execute("INSERT INTO study (study_id, name) VALUES (1, 'Default Study')");
+        // Clean up authorities and user accounts for our specific test users to avoid key constraint violations
+        jdbcTemplate.execute("DELETE FROM authorities WHERE username IN ('legacy_bcrypt_user', 'legacy_md5_user', 'sso_legacy_user')");
+        jdbcTemplate.execute("DELETE FROM user_account WHERE user_name IN ('legacy_bcrypt_user', 'legacy_md5_user', 'sso_legacy_user')");
+
+        // Seed default study safely (if not already present)
+        try {
+            jdbcTemplate.execute("INSERT INTO study (study_id, name) VALUES (1, 'Default Study')");
+        } catch (Exception e) {
+            // Ignore if study with ID 1 already exists
+        }
 
         // Set up Mock legacy DB connections
         mockConnection = mock(Connection.class);
@@ -102,11 +108,13 @@ public class LegacyMigrationTest {
         when(mockStatement.executeQuery()).thenReturn(mockResultSet);
 
         // Ensure we don't have lingering test users in the local db
+        jdbcTemplate.execute("DELETE FROM authorities WHERE username IN ('legacy_bcrypt_user', 'legacy_md5_user', 'sso_legacy_user')");
         jdbcTemplate.execute("DELETE FROM user_account WHERE user_name IN ('legacy_bcrypt_user', 'legacy_md5_user', 'sso_legacy_user')");
     }
 
     @AfterEach
     public void tearDown() {
+        jdbcTemplate.execute("DELETE FROM authorities WHERE username IN ('legacy_bcrypt_user', 'legacy_md5_user', 'sso_legacy_user')");
         jdbcTemplate.execute("DELETE FROM user_account WHERE user_name IN ('legacy_bcrypt_user', 'legacy_md5_user', 'sso_legacy_user')");
     }
 
