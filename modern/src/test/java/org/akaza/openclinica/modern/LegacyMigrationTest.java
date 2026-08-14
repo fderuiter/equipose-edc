@@ -44,6 +44,12 @@ public class LegacyMigrationTest {
 
     @BeforeEach
     public void setUp() throws Exception {
+        // Drop existing tables and sequences to avoid state leakage from other tests sharing the cached context
+        jdbcTemplate.execute("DROP TABLE IF EXISTS authorities CASCADE");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS user_account CASCADE");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS study CASCADE");
+        jdbcTemplate.execute("DROP SEQUENCE IF EXISTS user_account_user_id_seq");
+
         // Initialize required tables and sequences in H2 in-memory DB for the tests
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS study (" +
                 "    study_id INT PRIMARY KEY," +
