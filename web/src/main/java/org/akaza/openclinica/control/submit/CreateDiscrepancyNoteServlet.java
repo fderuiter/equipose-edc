@@ -166,7 +166,8 @@ public class CreateDiscrepancyNoteServlet extends SecureController {
     @Override
     protected void processRequest() throws Exception {
         FormProcessor fp = new FormProcessor(request);
-        DiscrepancyNoteDAO dndao = new DiscrepancyNoteDAO(sm.getDataSource());
+        org.akaza.openclinica.service.managestudy.DiscrepancyNoteService discrepancyNoteService =
+            (org.akaza.openclinica.service.managestudy.DiscrepancyNoteService) org.akaza.openclinica.control.SpringServletAccess.getApplicationContext(getServletContext()).getBean("discrepancyNoteService");
         List<DiscrepancyNoteType> types = DiscrepancyNoteType.list;
 
         request.setAttribute(DIS_TYPES, types);
@@ -360,16 +361,14 @@ public class CreateDiscrepancyNoteServlet extends SecureController {
         }
 
         // finds all the related notes
-        ArrayList notes = (ArrayList) dndao.findAllByEntityAndColumn(entityType, entityId, column);
+        ArrayList notes = new ArrayList(discrepancyNoteService.findAllByEntityAndColumn(entityType, entityId, column));
 
         DiscrepancyNoteBean parent = new DiscrepancyNoteBean();
         if (parentId > 0) {
-            dndao.setFetchMapping(true);
-            parent = (DiscrepancyNoteBean) dndao.findByPK(parentId);     
-			if (parent.isActive()) {
+            parent = (DiscrepancyNoteBean) discrepancyNoteService.findByPK(parentId);     
+			if (parent != null && parent.isActive()) {
                 request.setAttribute("parent", parent);
             }
-            dndao.setFetchMapping(false);
         } 
         FormDiscrepancyNotes newNotes = (FormDiscrepancyNotes) session.getAttribute(AddNewSubjectServlet.FORM_DISCREPANCY_NOTES_NAME);
 
@@ -727,52 +726,8 @@ public class CreateDiscrepancyNoteServlet extends SecureController {
                 } else {
                     // if not creating a new thread(note), update exsiting notes
                     // if necessary
-                    //if ("itemData".equalsIgnoreCase(entityType) && !isNew) {
-                    int pdnId = note!=null?note.getParentDnId():0;
-                    if(pdnId > 0) {
-                    	logger.debug("Create:find parent note for item data:" + note.getEntityId());
-
-                        DiscrepancyNoteBean pNote = (DiscrepancyNoteBean) dndao.findByPK(pdnId);
-
-                        logger.debug("setting DN owner id: " + pNote.getOwnerId());
-
-                        note.setOwnerId(pNote.getOwnerId());
-
-                        if (note.getDiscrepancyNoteTypeId() == pNote.getDiscrepancyNoteTypeId()) {
-
-                            if (note.getResolutionStatusId() != pNote.getResolutionStatusId()) {
-                                pNote.setResolutionStatusId(note.getResolutionStatusId());
-                                dndao.update(pNote);
-                            }
-
-                            if (note.getAssignedUserId() != pNote.getAssignedUserId()) {
-                                pNote.setAssignedUserId(note.getAssignedUserId());
-                                if(pNote.getAssignedUserId()>0) {
-                                    dndao.updateAssignedUser(pNote);
-                                } else {
-                                    dndao.updateAssignedUserToNull(pNote);
-                                }
-                            }
-
-                        }
-
-                    }
-                    
-                    note = (DiscrepancyNoteBean) dndao.create(note);
-                    note.setEntityId(entityId);
-                    dndao.createMapping(note);
-
+                    note = (DiscrepancyNoteBean) discrepancyNoteService.create(note);
                     request.setAttribute(DIS_NOTE, note);
-
-                    if (note.getParentDnId() == 0) {
-                        // see issue 2659 this is a new thread, we will create
-                        // two notes in this case,
-                        // This way one can be the parent that updates as the
-                        // status changes, but one also stays as New.
-                        note.setParentDnId(note.getId());
-                        note = (DiscrepancyNoteBean) dndao.create(note);
-                        dndao.createMapping(note);
-                    }
 
                     /*Setting a marker to check later while saving administrative edited data. This is needed to make
                     * sure the system flags error while changing data for items which already has a DiscrepanyNote*/
