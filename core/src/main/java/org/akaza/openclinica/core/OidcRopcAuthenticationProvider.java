@@ -169,8 +169,8 @@ public class OidcRopcAuthenticationProvider implements AuthenticationProvider {
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
-            conn.setConnectTimeout(3000);
-            conn.setReadTimeout(3000);
+            conn.setConnectTimeout(2000);
+            conn.setReadTimeout(2000);
             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
             conn.setRequestProperty("Accept", "application/json");
 
