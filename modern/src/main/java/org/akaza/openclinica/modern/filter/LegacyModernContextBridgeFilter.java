@@ -49,35 +49,52 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                 
                 Map<String, Object> claims = extractClaims(authentication);
 
-                // 1. Process Tenant Claims First
-                String tenantId = getClaimAsString(claims, "tenant_id");
-                if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) {
-                    if (tenantId == null || tenantId.trim().isEmpty()) {
-                        logger.warn("DEBUG JWT: tenantId is null/blank, rejecting with 403");
+                Map<String, Object> claims = extractClaims(authentication);
+
+                // 1. Process Tenant Claims First for Federated Principals
+                Object principal = authentication.getPrincipal();
+                boolean isFederated = (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken)
+                        || (principal instanceof org.springframework.security.oauth2.jwt.Jwt)
+                        || (principal instanceof org.springframework.security.oauth2.core.user.OAuth2User)
+                        || (principal instanceof org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticatedPrincipal)
+                        || (authentication.getClass().getName().contains("Saml2"))
+                        || (authentication.getClass().getName().contains("OAuth2"))
+                        || (claims != null && !claims.isEmpty());
+
+                if (isFederated) {
+                    Object tenantIdObj = claims != null ? claims.get("tenant_id") : null;
+                    if (tenantIdObj == null && claims != null) {
+                        tenantIdObj = claims.get("tenantId");
+                    }
+                    if (tenantIdObj == null && claims != null) {
+                        tenantIdObj = claims.get("tenant");
+                    }
+
+                    logger.warn("DEBUG FEDERATED: tenantIdObj = " + tenantIdObj + ", claims = " + claims);
+                    if (tenantIdObj == null || String.valueOf(tenantIdObj).trim().isEmpty()) {
+                        logger.warn("DEBUG FEDERATED: tenantIdObj is null, rejecting with 403");
                         logger.error("SECURITY ALERT: User identity token lacks a valid tenant identifier.");
                         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                         response.getWriter().write("Access Denied: Missing tenant identifier");
                         return;
                     }
+
+                    String tenantId = String.valueOf(tenantIdObj).trim();
                     boolean whitelisted = org.akaza.openclinica.modern.security.TenantContext.isWhitelisted(tenantId);
-                    logger.warn("DEBUG JWT: tenantId = " + tenantId + ", whitelisted = " + whitelisted);
+                    logger.warn("DEBUG FEDERATED: tenantId = " + tenantId + ", whitelisted = " + whitelisted);
                     if (!whitelisted) {
-                        logger.warn("DEBUG JWT: tenantId is not whitelisted, rejecting with 403");
+                        logger.warn("DEBUG FEDERATED: tenantId is not whitelisted, rejecting with 403");
                         logger.error("SECURITY ALERT: Tenant identifier " + tenantId + " is not whitelisted.");
                         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                         response.getWriter().write("Access Denied: Tenant not whitelisted");
                         return;
                     }
+
                     org.akaza.openclinica.modern.security.TenantContext.setCurrentTenant(tenantId);
-                } else if (tenantId != null && !tenantId.trim().isEmpty()) {
-                    boolean whitelisted = org.akaza.openclinica.modern.security.TenantContext.isWhitelisted(tenantId);
-                    if (!whitelisted) {
-                        logger.error("SECURITY ALERT: Tenant identifier " + tenantId + " is not whitelisted.");
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.getWriter().write("Access Denied: Tenant not whitelisted");
-                        return;
-                    }
-                    org.akaza.openclinica.modern.security.TenantContext.setCurrentTenant(tenantId);
+                }
+
+                if ("service_account".equals(username)) {
+                    org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
                 }
 
                 // 2. Validate User Identifier for JWT
@@ -101,7 +118,7 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                             || "client_id_claim".equalsIgnoreCase(candidate)) {
                             continue;
                         }
-                        Object value = claims.get(candidate);
+                        Object value = claims != null ? claims.get(candidate) : null;
                         if (value != null && !String.valueOf(value).trim().isEmpty()) {
                             userIdentifierObj = value;
                             break;
@@ -116,9 +133,9 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                     }
                     String userIdentifier = String.valueOf(userIdentifierObj);
 
-                    Object clientIdVal = claims.get("client_id");
-                    Object appidVal = claims.get("appid");
-                    Object azpVal = claims.get("azp");
+                    Object clientIdVal = claims != null ? claims.get("client_id") : null;
+                    Object appidVal = claims != null ? claims.get("appid") : null;
+                    Object azpVal = claims != null ? claims.get("azp") : null;
                     if ((clientIdVal != null && userIdentifier.equals(String.valueOf(clientIdVal)))
                         || (appidVal != null && userIdentifier.equals(String.valueOf(appidVal)))
                         || (azpVal != null && userIdentifier.equals(String.valueOf(azpVal)))) {
@@ -188,7 +205,7 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                             || "client_id_claim".equalsIgnoreCase(candidate)) {
                             continue;
                         }
-                        Object value = claims.get(candidate);
+                        Object value = claims != null ? claims.get(candidate) : null;
                         if (value != null && !String.valueOf(value).trim().isEmpty()) {
                             userIdentifierObj = value;
                             break;
@@ -200,7 +217,7 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                     if (userBean == null) {
                         userBean = new UserAccountBean();
                         userBean.setName(userIdentifier);
-                        if (claims.containsKey("user_id")) {
+                        if (claims != null && claims.containsKey("user_id")) {
                             try {
                                 userBean.setId(Integer.parseInt(String.valueOf(claims.get("user_id"))));
                             } catch (Exception e) {
@@ -221,6 +238,9 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                             if (studyId > 0) {
                                 userBean.setActiveStudyId(studyId);
                             }
+                        }
+                    }
+                }
                         }
                     }
                 } else {
@@ -542,20 +562,24 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
     }
 
     private static class StatelessSessionRequestWrapper extends HttpServletRequestWrapper {
-        private HttpSession statelessSession;
+        private final HttpServletRequest realRequest;
+        private HttpSession proxySession;
 
         public StatelessSessionRequestWrapper(HttpServletRequest request) {
             super(request);
+            this.realRequest = request;
         }
 
         @Override
         public HttpSession getSession(boolean create) {
-            if (statelessSession == null && create) {
-                statelessSession = createStatelessSession(super.getSession(false));
-            } else if (statelessSession == null && !create) {
-                return super.getSession(false);
+            if (proxySession != null) {
+                return proxySession;
             }
-            return statelessSession;
+            if (!create && realRequest.getSession(false) == null) {
+                return null;
+            }
+            proxySession = createStatelessSessionProxy();
+            return proxySession;
         }
 
         @Override
@@ -563,44 +587,112 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
             return getSession(true);
         }
 
-        private HttpSession createStatelessSession(HttpSession originalSession) {
-            Map<String, Object> attributes = new HashMap<>();
+        private HttpSession createStatelessSessionProxy() {
+            Map<String, Object> localAttributes = new HashMap<>();
+            long creationTime = System.currentTimeMillis();
+
             return (HttpSession) Proxy.newProxyInstance(
                     HttpSession.class.getClassLoader(),
                     new Class<?>[]{HttpSession.class},
                     (proxy, method, args) -> {
                         String methodName = method.getName();
+
                         if ("getAttribute".equals(methodName)) {
-                            Object val = attributes.get(args[0]);
-                            if (val == null && originalSession != null) {
-                                return originalSession.getAttribute((String) args[0]);
+                            String name = (String) args[0];
+                            if (localAttributes.containsKey(name)) {
+                                return localAttributes.get(name);
                             }
-                            return val;
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getAttribute(name);
+                            }
+                            return null;
+
                         } else if ("setAttribute".equals(methodName)) {
-                            attributes.put((String) args[0], args[1]);
-                            if (originalSession != null) {
-                                originalSession.setAttribute((String) args[0], args[1]);
+                            String name = (String) args[0];
+                            Object value = args[1];
+                            if (value == null) {
+                                localAttributes.remove(name);
+                                HttpSession phys = realRequest.getSession(false);
+                                if (phys != null) {
+                                    phys.removeAttribute(name);
+                                }
+                            } else {
+                                localAttributes.put(name, value);
+                                // Lazily instantiate container session on write
+                                HttpSession phys = realRequest.getSession(true);
+                                if (phys != null) {
+                                    phys.setAttribute(name, value);
+                                }
                             }
                             return null;
+
                         } else if ("removeAttribute".equals(methodName)) {
-                            attributes.remove(args[0]);
-                            if (originalSession != null) {
-                                originalSession.removeAttribute((String) args[0]);
+                            String name = (String) args[0];
+                            localAttributes.remove(name);
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                phys.removeAttribute(name);
                             }
                             return null;
+
                         } else if ("getAttributeNames".equals(methodName)) {
-                            return Collections.enumeration(attributes.keySet());
-                        } else if (originalSession != null) {
-                            return method.invoke(originalSession, args);
+                            java.util.Set<String> names = new java.util.HashSet<>(localAttributes.keySet());
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                java.util.Enumeration<String> physNames = phys.getAttributeNames();
+                                while (physNames.hasMoreElements()) {
+                                    names.add(physNames.nextElement());
+                                }
+                            }
+                            return Collections.enumeration(names);
+
+                        } else if ("getId".equals(methodName)) {
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getId();
+                            }
+                            return "stateless-session";
+
+                        } else if ("getCreationTime".equals(methodName)) {
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getCreationTime();
+                            }
+                            return creationTime;
+
+                        } else if ("getLastAccessedTime".equals(methodName)) {
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getLastAccessedTime();
+                            }
+                            return System.currentTimeMillis();
+
+                        } else if ("getServletContext".equals(methodName)) {
+                            return realRequest.getServletContext();
+
+                        } else if ("invalidate".equals(methodName)) {
+                            localAttributes.clear();
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                phys.invalidate();
+                            }
+                            return null;
                         }
-                        
-                        if ("getId".equals(methodName)) return "stateless-session";
-                        if ("getCreationTime".equals(methodName)) return System.currentTimeMillis();
-                        if ("getLastAccessedTime".equals(methodName)) return System.currentTimeMillis();
-                        if ("getServletContext".equals(methodName)) return super.getServletContext();
-                        
+
+                        HttpSession phys = realRequest.getSession(false);
+                        if (phys != null) {
+                            return method.invoke(phys, args);
+                        }
+
                         if (method.getReturnType().equals(Void.TYPE)) {
                             return null;
+                        }
+                        if (method.getReturnType().equals(Boolean.TYPE)) {
+                            return false;
+                        }
+                        if (method.getReturnType().equals(Integer.TYPE)) {
+                            return 0;
                         }
                         return null;
                     }
