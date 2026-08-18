@@ -724,6 +724,16 @@
           "auth-controller"
         ],
         "operationId": "token",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -794,6 +804,29 @@
           "auth-controller"
         ],
         "operationId": "jwks",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/config": {
+      "get": {
+        "tags": [
+          "auth-controller"
+        ],
+        "operationId": "config",
         "responses": {
           "200": {
             "description": "OK",
