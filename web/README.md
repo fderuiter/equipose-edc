@@ -2,7 +2,7 @@
 
 **OpenClinica Version:** 3.18-SNAPSHOT
 
-**Updated:** 2026-08-13
+**Updated:** 2026-08-18
 
 ## Overview
 
