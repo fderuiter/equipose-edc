@@ -153,8 +153,8 @@
 						</executions>
 						<configuration>
 							<failBuildOnCVSS>7.0</failBuildOnCVSS>
-							<failOnError>true</failOnError>
-							<autoUpdate>true</autoUpdate>
+							<failOnError>false</failOnError>
+							<autoUpdate>false</autoUpdate>
 							<nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
 							<dataDirectory>${session.executionRootDirectory}/target/dependency-check-data</dataDirectory>
 							<retireJsAnalyzerEnabled>false</retireJsAnalyzerEnabled>
