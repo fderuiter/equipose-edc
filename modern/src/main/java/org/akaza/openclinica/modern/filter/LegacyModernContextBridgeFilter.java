@@ -47,11 +47,102 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                 String username = authentication.getName();
                 logger.warn("DEBUG AUTH CLASS: " + authentication.getClass().getName() + ", username: " + username);
                 
-                if ("service_account".equals(username)) {
-                    org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
+                Map<String, Object> claims = extractClaims(authentication);
+
+                // 1. Process Tenant Claims First
+                String tenantId = getClaimAsString(claims, "tenant_id");
+                if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) {
+                    if (tenantId == null || tenantId.trim().isEmpty()) {
+                        logger.warn("DEBUG JWT: tenantId is null/blank, rejecting with 403");
+                        logger.error("SECURITY ALERT: User identity token lacks a valid tenant identifier.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Missing tenant identifier");
+                        return;
+                    }
+                    boolean whitelisted = org.akaza.openclinica.modern.security.TenantContext.isWhitelisted(tenantId);
+                    logger.warn("DEBUG JWT: tenantId = " + tenantId + ", whitelisted = " + whitelisted);
+                    if (!whitelisted) {
+                        logger.warn("DEBUG JWT: tenantId is not whitelisted, rejecting with 403");
+                        logger.error("SECURITY ALERT: Tenant identifier " + tenantId + " is not whitelisted.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Tenant not whitelisted");
+                        return;
+                    }
+                    org.akaza.openclinica.modern.security.TenantContext.setCurrentTenant(tenantId);
+                } else if (tenantId != null && !tenantId.trim().isEmpty()) {
+                    boolean whitelisted = org.akaza.openclinica.modern.security.TenantContext.isWhitelisted(tenantId);
+                    if (!whitelisted) {
+                        logger.error("SECURITY ALERT: Tenant identifier " + tenantId + " is not whitelisted.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Tenant not whitelisted");
+                        return;
+                    }
+                    org.akaza.openclinica.modern.security.TenantContext.setCurrentTenant(tenantId);
                 }
 
-                Map<String, Object> claims = extractClaims(authentication);
+                // 2. Validate User Identifier for JWT
+                if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) {
+                    String claimKeyConfig = System.getProperty("OIDC_USER_IDENTIFIER_CLAIM");
+                    if (claimKeyConfig == null || claimKeyConfig.trim().isEmpty()) {
+                        claimKeyConfig = System.getenv("OIDC_USER_IDENTIFIER_CLAIM");
+                    }
+                    String[] candidateKeys;
+                    if (claimKeyConfig != null && !claimKeyConfig.trim().isEmpty()) {
+                        candidateKeys = claimKeyConfig.split("\\s*,\\s*");
+                    } else {
+                        candidateKeys = new String[]{"user_id", "sub", "preferred_username"};
+                    }
+
+                    Object userIdentifierObj = null;
+                    for (String candidate : candidateKeys) {
+                        if ("client_id".equalsIgnoreCase(candidate) 
+                            || "appid".equalsIgnoreCase(candidate) 
+                            || "azp".equalsIgnoreCase(candidate)
+                            || "client_id_claim".equalsIgnoreCase(candidate)) {
+                            continue;
+                        }
+                        Object value = claims.get(candidate);
+                        if (value != null && !String.valueOf(value).trim().isEmpty()) {
+                            userIdentifierObj = value;
+                            break;
+                        }
+                    }
+
+                    if (userIdentifierObj == null) {
+                        logger.error("SECURITY ALERT: Configured user identifier claims " + java.util.Arrays.toString(candidateKeys) + " are missing or blank in the token.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Missing user identifier claim");
+                        return;
+                    }
+                    String userIdentifier = String.valueOf(userIdentifierObj);
+
+                    Object clientIdVal = claims.get("client_id");
+                    Object appidVal = claims.get("appid");
+                    Object azpVal = claims.get("azp");
+                    if ((clientIdVal != null && userIdentifier.equals(String.valueOf(clientIdVal)))
+                        || (appidVal != null && userIdentifier.equals(String.valueOf(appidVal)))
+                        || (azpVal != null && userIdentifier.equals(String.valueOf(azpVal)))) {
+                        logger.error("SECURITY ALERT: Resolved user identifier matches a client ID claim: " + userIdentifier + ". Rejecting to prevent account overwrites.");
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.getWriter().write("Access Denied: Invalid user identifier");
+                        return;
+                    }
+                }
+
+                // 3. Strict Active Study Context Validation
+                if (claims != null && !claims.isEmpty()) {
+                    if (hasStudyClaim(claims)) {
+                        int requestedStudyId = getClaimAsInt(claims, -1, "active_study_id", "study_id", "study", "activeStudyId");
+                        if (requestedStudyId > 0 && !isStudyIdValid(requestedStudyId)) {
+                            logger.error("SECURITY ALERT: Invalid or unauthorized study context request: study_id=" + requestedStudyId + " for tenant " + org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant());
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.getWriter().write("Access Denied: Invalid access context");
+                            return;
+                        }
+                    }
+                }
+
+                // 4. Provision or Update User
                 if (claims != null && !claims.isEmpty() && !"service_account".equals(username)) {
                     try {
                         provisionOrUpdateUser(username, claims);
@@ -78,31 +169,6 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
 
                 UserAccountBean userBean = null;
                 if (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) {
-                    org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken jwtAuth = (org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken) authentication;
-                    Map<String, Object> claimsForJwt = jwtAuth.getTokenAttributes();
-                    
-                    // Validate tenant ID claim
-                    Object tenantIdObj = claimsForJwt.get("tenant_id");
-                    logger.warn("DEBUG JWT: tenantIdObj = " + tenantIdObj + ", claims = " + claimsForJwt);
-                    if (tenantIdObj == null) {
-                        logger.warn("DEBUG JWT: tenantIdObj is null, rejecting with 403");
-                        logger.error("SECURITY ALERT: User identity token lacks a valid tenant identifier.");
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.getWriter().write("Access Denied: Missing tenant identifier");
-                        return;
-                    }
-                    String tenantId = String.valueOf(tenantIdObj);
-                    boolean whitelisted = org.akaza.openclinica.modern.security.TenantContext.isWhitelisted(tenantId);
-                    logger.warn("DEBUG JWT: tenantId = " + tenantId + ", whitelisted = " + whitelisted);
-                    if (!whitelisted) {
-                        logger.warn("DEBUG JWT: tenantId is not whitelisted, rejecting with 403");
-                        logger.error("SECURITY ALERT: Tenant identifier " + tenantId + " is not whitelisted.");
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.getWriter().write("Access Denied: Tenant not whitelisted");
-                        return;
-                    }
-                    org.akaza.openclinica.modern.security.TenantContext.setCurrentTenant(tenantId);
-
                     String claimKeyConfig = System.getProperty("OIDC_USER_IDENTIFIER_CLAIM");
                     if (claimKeyConfig == null || claimKeyConfig.trim().isEmpty()) {
                         claimKeyConfig = System.getenv("OIDC_USER_IDENTIFIER_CLAIM");
@@ -114,7 +180,6 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                         candidateKeys = new String[]{"user_id", "sub", "preferred_username"};
                     }
 
-                    String matchedClaimKey = null;
                     Object userIdentifierObj = null;
                     for (String candidate : candidateKeys) {
                         if ("client_id".equalsIgnoreCase(candidate) 
@@ -125,31 +190,11 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                         }
                         Object value = claims.get(candidate);
                         if (value != null && !String.valueOf(value).trim().isEmpty()) {
-                            matchedClaimKey = candidate;
                             userIdentifierObj = value;
                             break;
                         }
                     }
-
-                    if (userIdentifierObj == null) {
-                        logger.error("SECURITY ALERT: Configured user identifier claims " + java.util.Arrays.toString(candidateKeys) + " are missing or blank in the token.");
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.getWriter().write("Access Denied: Missing user identifier claim");
-                        return;
-                    }
                     String userIdentifier = String.valueOf(userIdentifierObj);
-
-                    Object clientIdVal = claims.get("client_id");
-                    Object appidVal = claims.get("appid");
-                    Object azpVal = claims.get("azp");
-                    if ((clientIdVal != null && userIdentifier.equals(String.valueOf(clientIdVal)))
-                        || (appidVal != null && userIdentifier.equals(String.valueOf(appidVal)))
-                        || (azpVal != null && userIdentifier.equals(String.valueOf(azpVal)))) {
-                        logger.error("SECURITY ALERT: Resolved user identifier matches a client ID claim: " + userIdentifier + ". Rejecting to prevent account overwrites.");
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.getWriter().write("Access Denied: Invalid user identifier");
-                        return;
-                    }
 
                     userBean = unifiedRepository.getUserAccountBeanByUserName(userIdentifier);
                     if (userBean == null) {
@@ -164,16 +209,18 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                         } else {
                             userBean.setId(1);
                         }
-                        if (claims.containsKey("active_study_id")) {
-                            try {
-                                userBean.setActiveStudyId(Integer.parseInt(String.valueOf(claims.get("active_study_id"))));
-                            } catch (Exception e) {}
+                        if (hasStudyClaim(claims)) {
+                            int studyId = getClaimAsInt(claims, -1, "active_study_id", "study_id", "study", "activeStudyId");
+                            if (studyId > 0) {
+                                userBean.setActiveStudyId(studyId);
+                            }
                         }
                     } else {
-                        if (claims.containsKey("active_study_id")) {
-                            try {
-                                userBean.setActiveStudyId(Integer.parseInt(String.valueOf(claims.get("active_study_id"))));
-                            } catch (Exception e) {}
+                        if (hasStudyClaim(claims)) {
+                            int studyId = getClaimAsInt(claims, -1, "active_study_id", "study_id", "study", "activeStudyId");
+                            if (studyId > 0) {
+                                userBean.setActiveStudyId(studyId);
+                            }
                         }
                     }
                 } else {
@@ -200,6 +247,10 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                         MDC.put(LoggingConstants.USERNAME, username);
                         mdcSet = true;
                     }
+                }
+
+                if ("service_account".equals(username)) {
+                    org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
                 }
             }
 
@@ -371,6 +422,14 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
         }
     }
 
+    private boolean hasStudyClaim(Map<String, Object> claims) {
+        if (claims == null) return false;
+        return claims.containsKey("active_study_id")
+            || claims.containsKey("study_id")
+            || claims.containsKey("study")
+            || claims.containsKey("activeStudyId");
+    }
+
     protected void provisionOrUpdateUser(String username, Map<String, Object> claims) throws Exception {
         String firstName = getClaimAsString(claims, "given_name", "firstName", "first_name", "givenName");
         if (firstName == null || firstName.isEmpty()) firstName = "First";
@@ -385,7 +444,11 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
         if (affiliation == null || affiliation.isEmpty()) affiliation = "SSO";
 
         int studyId = getClaimAsInt(claims, -1, "active_study_id", "study_id", "study", "activeStudyId");
-        if (studyId <= 0 || !isStudyIdValid(studyId)) {
+        if (studyId > 0) {
+            if (!isStudyIdValid(studyId)) {
+                throw new IllegalArgumentException("Invalid or unauthorized study identifier: " + studyId);
+            }
+        } else {
             studyId = getDefaultStudyId();
         }
 
