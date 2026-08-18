@@ -171,20 +171,24 @@ public class UnifiedSessionAuthenticationFilter extends OncePerRequestFilter {
     }
     
     private static class StatelessSessionRequestWrapper extends HttpServletRequestWrapper {
-        private HttpSession statelessSession;
+        private final HttpServletRequest realRequest;
+        private HttpSession proxySession;
 
         public StatelessSessionRequestWrapper(HttpServletRequest request) {
             super(request);
+            this.realRequest = request;
         }
 
         @Override
         public HttpSession getSession(boolean create) {
-            if (statelessSession == null && create) {
-                statelessSession = createStatelessSession(super.getSession(false));
-            } else if (statelessSession == null && !create) {
-                return super.getSession(false);
+            if (proxySession != null) {
+                return proxySession;
             }
-            return statelessSession;
+            if (!create && realRequest.getSession(false) == null) {
+                return null;
+            }
+            proxySession = createStatelessSessionProxy();
+            return proxySession;
         }
 
         @Override
@@ -192,46 +196,112 @@ public class UnifiedSessionAuthenticationFilter extends OncePerRequestFilter {
             return getSession(true);
         }
 
-        private HttpSession createStatelessSession(HttpSession originalSession) {
-            Map<String, Object> attributes = new HashMap<>();
+        private HttpSession createStatelessSessionProxy() {
+            Map<String, Object> localAttributes = new HashMap<>();
+            long creationTime = System.currentTimeMillis();
+
             return (HttpSession) Proxy.newProxyInstance(
                     HttpSession.class.getClassLoader(),
                     new Class<?>[]{HttpSession.class},
                     (proxy, method, args) -> {
                         String methodName = method.getName();
+
                         if ("getAttribute".equals(methodName)) {
-                            Object val = attributes.get(args[0]);
-                            if (val == null && originalSession != null) {
-                                return originalSession.getAttribute((String) args[0]);
+                            String name = (String) args[0];
+                            if (localAttributes.containsKey(name)) {
+                                return localAttributes.get(name);
                             }
-                            return val;
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getAttribute(name);
+                            }
+                            return null;
+
                         } else if ("setAttribute".equals(methodName)) {
-                            attributes.put((String) args[0], args[1]);
+                            String name = (String) args[0];
+                            Object value = args[1];
+                            if (value == null) {
+                                localAttributes.remove(name);
+                                HttpSession phys = realRequest.getSession(false);
+                                if (phys != null) {
+                                    phys.removeAttribute(name);
+                                }
+                            } else {
+                                localAttributes.put(name, value);
+                                // Lazily instantiate container session on write
+                                HttpSession phys = realRequest.getSession(true);
+                                if (phys != null) {
+                                    phys.setAttribute(name, value);
+                                }
+                            }
                             return null;
+
                         } else if ("removeAttribute".equals(methodName)) {
-                            attributes.remove(args[0]);
+                            String name = (String) args[0];
+                            localAttributes.remove(name);
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                phys.removeAttribute(name);
+                            }
                             return null;
+
                         } else if ("getAttributeNames".equals(methodName)) {
-                            return Collections.enumeration(attributes.keySet());
-                        } else if (originalSession != null) {
-                            return method.invoke(originalSession, args);
-                        }
-                        
-                        if ("getId".equals(methodName)) {
+                            java.util.Set<String> names = new java.util.HashSet<>(localAttributes.keySet());
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                java.util.Enumeration<String> physNames = phys.getAttributeNames();
+                                while (physNames.hasMoreElements()) {
+                                    names.add(physNames.nextElement());
+                                }
+                            }
+                            return Collections.enumeration(names);
+
+                        } else if ("getId".equals(methodName)) {
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getId();
+                            }
                             return "stateless-session";
-                        }
-                        if ("getCreationTime".equals(methodName)) {
+
+                        } else if ("getCreationTime".equals(methodName)) {
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getCreationTime();
+                            }
+                            return creationTime;
+
+                        } else if ("getLastAccessedTime".equals(methodName)) {
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                return phys.getLastAccessedTime();
+                            }
                             return System.currentTimeMillis();
+
+                        } else if ("getServletContext".equals(methodName)) {
+                            return realRequest.getServletContext();
+
+                        } else if ("invalidate".equals(methodName)) {
+                            localAttributes.clear();
+                            HttpSession phys = realRequest.getSession(false);
+                            if (phys != null) {
+                                phys.invalidate();
+                            }
+                            return null;
                         }
-                        if ("getLastAccessedTime".equals(methodName)) {
-                            return System.currentTimeMillis();
+
+                        HttpSession phys = realRequest.getSession(false);
+                        if (phys != null) {
+                            return method.invoke(phys, args);
                         }
-                        if ("getServletContext".equals(methodName)) {
-                            return super.getServletContext();
-                        }
-                        
+
                         if (method.getReturnType().equals(Void.TYPE)) {
                             return null;
+                        }
+                        if (method.getReturnType().equals(Boolean.TYPE)) {
+                            return false;
+                        }
+                        if (method.getReturnType().equals(Integer.TYPE)) {
+                            return 0;
                         }
                         return null;
                     }
