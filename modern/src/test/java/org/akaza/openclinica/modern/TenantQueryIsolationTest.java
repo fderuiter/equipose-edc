@@ -214,4 +214,33 @@ public class TenantQueryIsolationTest {
             studySecurityValidator.hasAdminOrCoordinatorRole("NON-EXISTENT-UID");
         });
     }
+
+    @Test
+    public void testForeignStudyContextRejectionAndNoRoleProvisioning() throws Exception {
+        // 1. Create study 101 under tenant-a
+        jdbcTemplate.update("INSERT INTO study (study_id, name, unique_identifier, oc_oid, tenant_id) VALUES (101, 'Study Tenant A', 'UID-101', 'OID-101', 'tenant-a')");
+
+        // 2. Create study 202 under tenant-b
+        jdbcTemplate.update("INSERT INTO study (study_id, name, unique_identifier, oc_oid, tenant_id) VALUES (202, 'Study Tenant B', 'UID-202', 'OID-202', 'tenant-b')");
+
+        // 3. Update service_account's active study to 202 (belonging to tenant-b)
+        jdbcTemplate.update("UPDATE user_account SET active_study = 202 WHERE user_name = 'service_account'");
+
+        // 4. Request token under tenant-a context (claims tenant_id=tenant-a, active_study_id=202)
+        String foreignStudyToken = mockMvc.perform(post("/api/auth/token")
+                .param("tenant_id", "tenant-a"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // 5. Attempt accessing protected resource with token claiming tenant-a but referencing study 202 (foreign tenant-b study)
+        mockMvc.perform(get("/api/odm/export")
+                .header("Authorization", "Bearer " + foreignStudyToken))
+                .andExpect(status().isForbidden());
+
+        // 6. Verify zero study_user_role records were created or updated for study 202 or service_account
+        TenantContext.setBypass(true);
+        Integer roleCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM study_user_role WHERE user_name = 'service_account'", Integer.class);
+        assertEquals(0, roleCount);
+        TenantContext.setBypass(false);
+    }
 }
