@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.akaza.openclinica.bean.login.UserAccountBean;
 import org.akaza.openclinica.repository.UnifiedRepository;
+import org.akaza.openclinica.modern.security.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticatedPrincipal;
 
 import javax.sql.DataSource;
@@ -23,6 +26,7 @@ import java.io.StringWriter;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -303,5 +307,97 @@ public class LegacyModernContextBridgeFilterTest {
 
         // Verify filter chain execution was aborted
         verify(chain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    public void testRejectForeignStudyContextRequest() throws Exception {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("tenant_id", "tenant-a");
+        claims.put("user_id", "attacker");
+        claims.put("active_study_id", 999);
+
+        Jwt jwt = new Jwt("token123", Instant.now(), Instant.now().plusSeconds(3600), Map.of("alg", "none"), claims);
+        JwtAuthenticationToken token = new JwtAuthenticationToken(jwt, null, "attacker");
+
+        SecurityContext sc = mock(SecurityContext.class);
+        when(sc.getAuthentication()).thenReturn(token);
+        SecurityContextHolder.setContext(sc);
+
+        ResultSet rsStudyInvalid = mock(ResultSet.class);
+        when(rsStudyInvalid.next()).thenReturn(false);
+
+        PreparedStatement psStudyInvalid = mock(PreparedStatement.class);
+        when(psStudyInvalid.executeQuery()).thenReturn(rsStudyInvalid);
+        when(connection.prepareStatement(contains("SELECT 1 FROM study"))).thenReturn(psStudyInvalid);
+
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        when(response.getWriter()).thenReturn(pw);
+
+        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        filter.doFilter(request, response, chain);
+
+        verify(response).setStatus(HttpServletResponse.SC_FORBIDDEN);
+        assertTrue(sw.toString().contains("Access Denied: Invalid access context"));
+
+        verify(chain, never()).doFilter(any(), any());
+
+        verify(connection, never()).prepareStatement(contains("INSERT INTO user_account"));
+        verify(connection, never()).prepareStatement(contains("UPDATE user_account"));
+        verify(connection, never()).prepareStatement(contains("INSERT INTO study_user_role"));
+        verify(connection, never()).prepareStatement(contains("UPDATE study_user_role"));
+    }
+
+    @Test
+    public void testAcceptValidTenantStudyContextRequest() throws Exception {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("tenant_id", "tenant-a");
+        claims.put("user_id", "valid_user");
+        claims.put("active_study_id", 101);
+
+        Jwt jwt = new Jwt("token123", Instant.now(), Instant.now().plusSeconds(3600), Map.of("alg", "none"), claims);
+        JwtAuthenticationToken token = new JwtAuthenticationToken(jwt, null, "valid_user");
+
+        SecurityContext sc = mock(SecurityContext.class);
+        when(sc.getAuthentication()).thenReturn(token);
+        SecurityContextHolder.setContext(sc);
+
+        ResultSet rsStudyValid = mock(ResultSet.class);
+        when(rsStudyValid.next()).thenReturn(true);
+
+        ResultSet rsUserExist = mock(ResultSet.class);
+        when(rsUserExist.next()).thenReturn(true);
+        when(rsUserExist.getInt(1)).thenReturn(50);
+
+        ResultSet rsRoleExist = mock(ResultSet.class);
+        when(rsRoleExist.next()).thenReturn(true);
+
+        PreparedStatement psStudyValid = mock(PreparedStatement.class);
+        when(psStudyValid.executeQuery()).thenReturn(rsStudyValid);
+
+        PreparedStatement psUserExist = mock(PreparedStatement.class);
+        when(psUserExist.executeQuery()).thenReturn(rsUserExist);
+
+        PreparedStatement psUpdateUser = mock(PreparedStatement.class);
+        PreparedStatement psRoleExistStmt = mock(PreparedStatement.class);
+        when(psRoleExistStmt.executeQuery()).thenReturn(rsRoleExist);
+        PreparedStatement psUpdateRole = mock(PreparedStatement.class);
+
+        when(connection.prepareStatement(contains("SELECT 1 FROM study"))).thenReturn(psStudyValid);
+        when(connection.prepareStatement(contains("SELECT user_id FROM user_account"))).thenReturn(psUserExist);
+        when(connection.prepareStatement(contains("UPDATE user_account SET"))).thenReturn(psUpdateUser);
+        when(connection.prepareStatement(contains("SELECT 1 FROM study_user_role"))).thenReturn(psRoleExistStmt);
+        when(connection.prepareStatement(contains("UPDATE study_user_role SET"))).thenReturn(psUpdateRole);
+
+        UserAccountBean uBean = new UserAccountBean();
+        uBean.setName("valid_user");
+        uBean.setId(50);
+        when(unifiedRepository.getUserAccountBeanByUserName("valid_user")).thenReturn(uBean);
+
+        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(any(), eq(response));
+        verify(psUpdateUser).executeUpdate();
     }
 }

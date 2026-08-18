@@ -47,6 +47,14 @@ public class OidcBridgeTests {
         responseOutput = new StringWriter();
         when(response.getWriter()).thenReturn(new PrintWriter(responseOutput));
 
+        java.sql.Connection conn = mock(java.sql.Connection.class);
+        java.sql.PreparedStatement ps = mock(java.sql.PreparedStatement.class);
+        java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+        when(dataSource.getConnection()).thenReturn(conn);
+        when(conn.prepareStatement(anyString())).thenReturn(ps);
+        when(ps.executeQuery()).thenReturn(rs);
+        when(rs.next()).thenReturn(true);
+
         SecurityContextHolder.clearContext();
         TenantContext.setCurrentTenant(null);
         TenantContext.setBypass(false);
