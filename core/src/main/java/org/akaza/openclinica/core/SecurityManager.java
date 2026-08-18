@@ -42,11 +42,14 @@ public class SecurityManager {
     }
 
     public boolean verifyPassword(String clearTextPassword, UserDetails userDetails) {
-        Authentication authentication = new UsernamePasswordAuthenticationToken(userDetails.getUsername(), clearTextPassword);
+        Object principal = userDetails != null ? userDetails : "";
+        Authentication authentication = new UsernamePasswordAuthenticationToken(principal, clearTextPassword);
         for (AuthenticationProvider p : providers) {
             try {
-                p.authenticate(authentication);
-                return true;
+                Authentication result = p.authenticate(authentication);
+                if (result != null && result.isAuthenticated()) {
+                    return true;
+                }
             } catch (AuthenticationException e) {
             }
         }
