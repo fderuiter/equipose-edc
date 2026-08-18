@@ -91,6 +91,7 @@ public class LegacyModernContextBridgeFilterTest {
     public void testProvisionNewUserOAuth2() throws Exception {
         OAuth2User oauth2User = mock(OAuth2User.class);
         Map<String, Object> attributes = new HashMap<>();
+        attributes.put("tenant_id", "tenant-a");
         attributes.put("given_name", "John");
         attributes.put("family_name", "Doe");
         attributes.put("email", "john.doe@example.com");
@@ -192,6 +193,7 @@ public class LegacyModernContextBridgeFilterTest {
     public void testProvisionReturningUserSaml2() throws Exception {
         Saml2AuthenticatedPrincipal samlPrincipal = mock(Saml2AuthenticatedPrincipal.class);
         Map<String, List<Object>> attrs = new HashMap<>();
+        attrs.put("tenant_id", Collections.singletonList("tenant-a"));
         attrs.put("firstName", Collections.singletonList("Jane"));
         attrs.put("lastName", Collections.singletonList("Smith"));
         attrs.put("mail", Collections.singletonList("jane.smith@example.com"));
@@ -263,12 +265,14 @@ public class LegacyModernContextBridgeFilterTest {
         verify(psUpdateRole).executeUpdate();
 
         verify(chain).doFilter(any(), eq(response));
+        assertNull(org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant());
     }
 
     @Test
     public void testProvisionExceptionFriendlyErrorRedirection() throws Exception {
         OAuth2User oauth2User = mock(OAuth2User.class);
         Map<String, Object> attributes = new HashMap<>();
+        attributes.put("tenant_id", "tenant-a");
         attributes.put("given_name", "Fail");
         attributes.put("family_name", "User");
         when(oauth2User.getAttributes()).thenReturn(attributes);
@@ -303,5 +307,76 @@ public class LegacyModernContextBridgeFilterTest {
 
         // Verify filter chain execution was aborted
         verify(chain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    public void testSaml2MissingTenantIdRejected() throws Exception {
+        Saml2AuthenticatedPrincipal samlPrincipal = mock(Saml2AuthenticatedPrincipal.class);
+        Map<String, List<Object>> attrs = new HashMap<>();
+        attrs.put("firstName", Collections.singletonList("NoTenant"));
+        when(samlPrincipal.getAttributes()).thenReturn(attrs);
+
+        Authentication auth = mock(Authentication.class);
+        when(auth.isAuthenticated()).thenReturn(true);
+        when(auth.getName()).thenReturn("notenant");
+        when(auth.getPrincipal()).thenReturn(samlPrincipal);
+
+        SecurityContext sc = mock(SecurityContext.class);
+        when(sc.getAuthentication()).thenReturn(auth);
+        SecurityContextHolder.setContext(sc);
+
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        when(response.getWriter()).thenReturn(pw);
+
+        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository);
+        filter.doFilter(request, response, chain);
+
+        verify(response).setStatus(HttpServletResponse.SC_FORBIDDEN);
+        assertTrue(sw.toString().contains("Missing tenant identifier"));
+        verify(chain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    public void testLazySessionInstantiationOnWriteOnly() throws Exception {
+        OAuth2User oauth2User = mock(OAuth2User.class);
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put("tenant_id", "tenant-a");
+        when(oauth2User.getAttributes()).thenReturn(attributes);
+
+        Authentication auth = mock(Authentication.class);
+        when(auth.isAuthenticated()).thenReturn(true);
+        when(auth.getName()).thenReturn("lazy_user");
+        when(auth.getPrincipal()).thenReturn(oauth2User);
+
+        SecurityContext sc = mock(SecurityContext.class);
+        when(sc.getAuthentication()).thenReturn(auth);
+        SecurityContextHolder.setContext(sc);
+
+        UserAccountBean uBean = new UserAccountBean();
+        uBean.setName("lazy_user");
+        uBean.setId(555);
+        when(unifiedRepository.getUserAccountBeanByUserName("lazy_user")).thenReturn(uBean);
+
+        HttpServletRequest rawRequest = mock(HttpServletRequest.class);
+        HttpSession containerSession = mock(HttpSession.class);
+        when(rawRequest.getSession(false)).thenReturn(null);
+        when(rawRequest.getSession(true)).thenReturn(containerSession);
+
+        LegacyModernContextBridgeFilter filter = new LegacyModernContextBridgeFilter(dataSource, unifiedRepository) {
+            @Override
+            protected void provisionOrUpdateUser(String username, Map<String, Object> claims) throws Exception {}
+        };
+        
+        ArgumentCaptor<HttpServletRequest> reqCaptor = ArgumentCaptor.forClass(HttpServletRequest.class);
+        filter.doFilter(rawRequest, response, chain);
+
+        verify(chain).doFilter(reqCaptor.capture(), eq(response));
+        HttpServletRequest wrappedReq = reqCaptor.getValue();
+        
+        // At this point, setAttribute("userBean", uBean) was called inside the filter
+        // Verify containerSession was lazily instantiated via getSession(true)
+        verify(rawRequest).getSession(true);
+        verify(containerSession).setAttribute(eq("userBean"), eq(uBean));
     }
 }

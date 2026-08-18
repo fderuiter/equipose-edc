@@ -288,7 +288,7 @@
                 <executions>
                     <execution>
                         <id>attach-artifacts</id>
-                        <phase>package</phase>
+                        <phase>compile</phase>
                         <goals>
                             <goal>attach-artifact</goal>
                         </goals>
