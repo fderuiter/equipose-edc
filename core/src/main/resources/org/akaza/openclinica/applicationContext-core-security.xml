@@ -30,10 +30,15 @@
         <property name="legacyDbPassword" value="${legacy.db.password:}"/>
     </bean>
 
+    <bean id="oidcRopcAuthenticationProvider" class="org.akaza.openclinica.core.OidcRopcAuthenticationProvider">
+        <property name="userDetailsService" ref="ocUserDetailsService"/>
+    </bean>
+
     <bean id="securityManager" class="org.akaza.openclinica.core.SecurityManager">
         <property name="encoder" ref="openClinicaPasswordEncoder"/>
         <property name="providers">
             <list>
+                <ref bean="oidcRopcAuthenticationProvider"/>
                 <ref bean="ldapAuthenticationProvider"/>
                 <ref bean="legacyMigrationAuthenticationProvider"/>
                 <bean class="org.springframework.security.authentication.dao.DaoAuthenticationProvider">
