@@ -358,16 +358,31 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
     }
 
     private boolean isStudyIdValid(int studyId) {
-        try (java.sql.Connection conn = dataSource.getConnection();
-             java.sql.PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM study WHERE study_id = ?")) {
-            ps.setInt(1, studyId);
-            try (java.sql.ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+        String currentTenant = org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant();
+        if (currentTenant != null && !currentTenant.trim().isEmpty()) {
+            try (java.sql.Connection conn = dataSource.getConnection();
+                 java.sql.PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM study WHERE study_id = ? AND (tenant_id = ? OR tenant_id IS NULL)")) {
+                ps.setInt(1, studyId);
+                ps.setString(2, currentTenant);
+                try (java.sql.ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            } catch (Exception e) {
+                logger.error("Failed to validate study id: " + studyId + " for tenant: " + currentTenant, e);
             }
-        } catch (Exception e) {
-            logger.error("Failed to validate study id: " + studyId, e);
+            return false;
+        } else {
+            try (java.sql.Connection conn = dataSource.getConnection();
+                 java.sql.PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM study WHERE study_id = ?")) {
+                ps.setInt(1, studyId);
+                try (java.sql.ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            } catch (Exception e) {
+                logger.error("Failed to validate study id: " + studyId, e);
+            }
+            return false;
         }
-        return false;
     }
 
     private Integer getUserIdByUsername(String username) {
