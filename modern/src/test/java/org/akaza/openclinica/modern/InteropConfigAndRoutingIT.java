@@ -52,8 +52,8 @@ public class InteropConfigAndRoutingIT extends AbstractIntegrationTest {
         jdbcTemplate.execute("DROP SEQUENCE IF EXISTS audit_log_event_audit_id_seq; CREATE SEQUENCE audit_log_event_audit_id_seq");
 
         // Insert defaults/specifics
-        jdbcTemplate.execute("INSERT INTO study (study_id, name, oc_oid) VALUES (1, 'Default Study', 'S_DEFAULT')");
-        jdbcTemplate.execute("INSERT INTO study (study_id, name, oc_oid) VALUES (100, 'Oncology Study', 'S_ONCO')");
+        jdbcTemplate.execute("INSERT INTO study (study_id, name, oc_oid, tenant_id) VALUES (1, 'Default Study', 'S_DEFAULT', 'tenant-a')");
+        jdbcTemplate.execute("INSERT INTO study (study_id, name, oc_oid, tenant_id) VALUES (100, 'Oncology Study', 'S_ONCO', 'tenant-a')");
 
         jdbcTemplate.execute("INSERT INTO crf_version (crf_version_id, name, oc_oid, crf_id) VALUES (1, 'Default CRF', 'V_DEFAULT', 1)");
         jdbcTemplate.execute("INSERT INTO crf_version (crf_version_id, name, oc_oid, crf_id) VALUES (200, 'CRF Version 2', 'V_CRF2', 1)");
