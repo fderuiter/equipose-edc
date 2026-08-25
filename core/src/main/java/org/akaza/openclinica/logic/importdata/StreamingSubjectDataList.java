@@ -111,7 +111,12 @@ public class StreamingSubjectDataList extends ArrayList<SubjectDataBean> {
                     }
                 }
                 reader.close();
-            } catch (Exception e) { e.getMessage(); }
+            } catch (Exception e) {
+                if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
+                }
+                throw new RuntimeException("Error calculating dataset size: " + e.getMessage(), e);
+            }
         }
         return size;
     }
