@@ -14,6 +14,11 @@ if ! command -v python3 &> /dev/null; then
     fi
 fi
 
+if ! python3 -c "import yaml" &> /dev/null; then
+    echo "PyYAML not found, attempting installation..."
+    python3 -m pip install pyyaml &> /dev/null || true
+fi
+
 echo "Regenerating REST and SOAP specifications..."
 if ! python3 utils/merge_openapi.py; then
     if [ "$STRICT_MODE" = "true" ]; then
