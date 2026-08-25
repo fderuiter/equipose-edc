@@ -64,7 +64,7 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
             if (session != null) {
                 try {
                     session.close();
-                } catch (Exception e) {
+                } catch (Exception ignored) {
                     // Ignore
                 }
             }
@@ -91,7 +91,7 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
             if (session != null) {
                 try {
                     session.close();
-                } catch (Exception e) {
+                } catch (Exception ignored) {
                     // Ignore
                 }
             }
@@ -128,7 +128,7 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
             if (session != null) {
                 try {
                     session.close();
-                } catch (Exception e) {
+                } catch (Exception ignored) {
                     // Ignore secondary close exceptions to ensure AuditSequenceException propagates
                 }
             }
