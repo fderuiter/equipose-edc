@@ -49,8 +49,6 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                 
                 Map<String, Object> claims = extractClaims(authentication);
 
-                Map<String, Object> claims = extractClaims(authentication);
-
                 // 1. Process Tenant Claims First for Federated Principals
                 Object principal = authentication.getPrincipal();
                 boolean isFederated = (authentication instanceof org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken)
@@ -238,9 +236,6 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                             if (studyId > 0) {
                                 userBean.setActiveStudyId(studyId);
                             }
-                        }
-                    }
-                }
                         }
                     }
                 } else {
