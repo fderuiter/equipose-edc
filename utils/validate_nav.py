@@ -1,15 +1,25 @@
 import os
 import sys
-import yaml
+import subprocess
 
-def env_constructor(loader, node):
-    if isinstance(node, yaml.ScalarNode):
-        return loader.construct_scalar(node)
-    elif isinstance(node, yaml.SequenceNode):
-        return [loader.construct_object(child) for child in node.value]
-    return None
+try:
+    import yaml
+except ImportError:
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml", "--quiet"])
+        import yaml
+    except Exception:
+        yaml = None
 
-yaml.SafeLoader.add_constructor("!ENV", env_constructor)
+if yaml is not None:
+    def env_constructor(loader, node):
+        if isinstance(node, yaml.ScalarNode):
+            return loader.construct_scalar(node)
+        elif isinstance(node, yaml.SequenceNode):
+            return [loader.construct_object(child) for child in node.value]
+        return None
+
+    yaml.SafeLoader.add_constructor("!ENV", env_constructor)
 
 def extract_nav_paths(nav_item, paths):
     """Recursively extract file paths from the mkdocs nav structure."""
