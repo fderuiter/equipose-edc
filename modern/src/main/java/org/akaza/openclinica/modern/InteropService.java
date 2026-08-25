@@ -25,6 +25,7 @@ import org.akaza.openclinica.domain.datamap.CrfVersion;
 import org.akaza.openclinica.domain.datamap.CompletionStatus;
 import org.akaza.openclinica.domain.Status;
 import org.akaza.openclinica.domain.user.UserAccount;
+import org.akaza.openclinica.modern.security.TenantContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -501,22 +502,28 @@ public class InteropService {
 
     @Transactional(readOnly = true)
     public Study findStudy(String id) {
-        if (id == null || id.trim().isEmpty()) {
-            return entityManager.find(Study.class, 1);
-        }
+        boolean previousBypass = TenantContext.isBypass();
         try {
-            if (id.trim().matches("\\d+")) {
-                Study study = entityManager.find(Study.class, Integer.parseInt(id.trim()));
-                if (study != null) return study;
+            TenantContext.setBypass(true);
+            if (id == null || id.trim().isEmpty()) {
+                return entityManager.find(Study.class, 1);
             }
-        } catch (Exception e) {}
-        try {
-            return entityManager.createQuery("SELECT s FROM Study s WHERE s.oc_oid = :id OR s.name = :id", Study.class)
-                    .setParameter("id", id.trim())
-                    .setMaxResults(1)
-                    .getSingleResult();
-        } catch (Exception e) {
-            return null;
+            try {
+                if (id.trim().matches("\\d+")) {
+                    Study study = entityManager.find(Study.class, Integer.parseInt(id.trim()));
+                    if (study != null) return study;
+                }
+            } catch (Exception e) {}
+            try {
+                return entityManager.createQuery("SELECT s FROM Study s WHERE s.oc_oid = :id OR s.name = :id", Study.class)
+                        .setParameter("id", id.trim())
+                        .setMaxResults(1)
+                        .getSingleResult();
+            } catch (Exception e) {
+                return null;
+            }
+        } finally {
+            TenantContext.setBypass(previousBypass);
         }
     }
 

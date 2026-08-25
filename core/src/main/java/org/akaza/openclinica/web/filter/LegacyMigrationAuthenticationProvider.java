@@ -247,7 +247,7 @@ public class LegacyMigrationAuthenticationProvider implements AuthenticationProv
 
     private int getDefaultStudyId() {
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT study_id FROM study ORDER BY study_id ASC LIMIT 1");
+             PreparedStatement ps = conn.prepareStatement("SELECT study_id, tenant_id FROM study ORDER BY study_id ASC LIMIT 1");
              ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
                 return rs.getInt(1);
@@ -260,7 +260,7 @@ public class LegacyMigrationAuthenticationProvider implements AuthenticationProv
 
     private boolean isStudyIdValid(int studyId) {
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM study WHERE study_id = ?")) {
+             PreparedStatement ps = conn.prepareStatement("SELECT 1, tenant_id FROM study WHERE study_id = ?")) {
             ps.setInt(1, studyId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
