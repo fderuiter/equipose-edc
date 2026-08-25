@@ -64,6 +64,10 @@ public class InteropConfigAndRoutingIT extends AbstractIntegrationTest {
         jdbcTemplate.execute("INSERT INTO public.user_account (user_id, enabled, account_non_locked, enable_api_key, run_webservices, lock_counter) VALUES (1, true, true, false, false, 0)");
         jdbcTemplate.execute("INSERT INTO completion_status (completion_status_id) VALUES (1)");
         jdbcTemplate.execute("INSERT INTO study_event_definition (study_event_definition_id, oc_oid) VALUES (1, 'ev1')");
+
+        org.springframework.security.core.Authentication auth = 
+            new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("admin", "N/A", java.util.Collections.emptyList());
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     @Test
@@ -116,7 +120,7 @@ public class InteropConfigAndRoutingIT extends AbstractIntegrationTest {
         // Stage a clinical record
         String recordId = "staged-rec-123";
         String payload = "{\"subject_id\":\"subject-A\",\"event_id\":\"ev1\",\"item_value\":\"120/80\"}";
-        interopService.validate(recordId, payload);
+        interopService.validate(recordId, payload, "admin");
 
         // Verify the review queue shows correct target study name and CRF version name
         mockMvc.perform(get("/interop/pipeline/review")
@@ -144,5 +148,22 @@ public class InteropConfigAndRoutingIT extends AbstractIntegrationTest {
         // Check ItemData was created with item_id = 300
         Integer itemId = jdbcTemplate.queryForObject("SELECT item_id FROM item_data WHERE value = '120/80'", Integer.class);
         assertEquals(300, itemId);
+    }
+
+    @Test
+    public void testUnauthenticatedRequestsRejected() throws Exception {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+
+        mockMvc.perform(get("/interop/mapping/data")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/interop/pipeline/review")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/config/draft/123")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
     }
 }

@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.akaza.openclinica.sdk.dto.ApiResponse;
 import org.akaza.openclinica.modern.service.ConfigurationDraftService;
 import org.akaza.openclinica.modern.model.ConfigurationDraft;
@@ -61,13 +64,26 @@ public class InteropController {
         }
     }
 
+    private Authentication getAuthenticatedUser() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal()) || auth instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+        return auth;
+    }
+
     @PostMapping("/fhir")
     public ResponseEntity<ApiResponse<String>> ingestFhir(@RequestBody String payload) {
+        Authentication auth = getAuthenticatedUser();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String userName = auth.getName();
         try {
             IParser parser = fhirContext.newJsonParser();
             Patient patient = parser.parseResource(Patient.class, payload);
-            interopService.validate(patient.getIdBase(), payload);
-            log.info("Ingestion action: FHIR R4 resource received by user 'system', recordId: {}", patient.getIdBase());
+            interopService.validate(patient.getIdBase(), payload, userName);
+            log.info("Ingestion action: FHIR R4 resource received by user '{}', recordId: {}", userName, patient.getIdBase());
             return ResponseEntity.ok(new ApiResponse<>("FHIR R4 resource received: " + patient.getIdBase()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse<>("Invalid FHIR payload"));
@@ -76,11 +92,16 @@ public class InteropController {
 
     @PostMapping("/hl7")
     public ResponseEntity<ApiResponse<String>> ingestHl7(@RequestBody String payload) {
+        Authentication auth = getAuthenticatedUser();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String userName = auth.getName();
         try {
             PipeParser parser = hl7Context.getPipeParser();
             Message message = parser.parse(payload);
-            interopService.validate(message.getName(), payload);
-            log.info("Ingestion action: HL7 v2 message parsed by user 'system', recordId: {}", message.getName());
+            interopService.validate(message.getName(), payload, userName);
+            log.info("Ingestion action: HL7 v2 message parsed by user '{}', recordId: {}", userName, message.getName());
             return ResponseEntity.ok(new ApiResponse<>("HL7 v2 message parsed: " + message.getName()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ApiResponse<>("Invalid HL7 payload"));
@@ -89,11 +110,21 @@ public class InteropController {
 
     @GetMapping("/mapping/data")
     public ResponseEntity<ApiResponse<Map<String, String>>> getMappingInterface() {
+        Authentication auth = getAuthenticatedUser();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         return ResponseEntity.ok(new ApiResponse<>(mappings));
     }
 
     @PostMapping("/mapping/data")
     public ResponseEntity<ApiResponse<String>> saveMapping(@jakarta.validation.Valid @RequestBody org.akaza.openclinica.modern.dto.MappingDataRequest newMappings) {
+        Authentication auth = getAuthenticatedUser();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String userName = auth.getName();
+
         try {
             interopService.validateTargetIdentifiers(
                 newMappings.getTargetStudy(),
@@ -113,8 +144,8 @@ public class InteropController {
 
         try {
             String json = objectMapper.writeValueAsString(mappings);
-            draftService.saveDraftWithId(MAPPINGS_ID, "system", MAPPINGS_DRAFT_TYPE, json);
-            log.info("Mapping change action: user 'system' updated field mappings");
+            draftService.saveDraftWithId(MAPPINGS_ID, userName, MAPPINGS_DRAFT_TYPE, json);
+            log.info("Mapping change action: user '{}' updated field mappings", userName);
         } catch (Exception e) {
             log.error("Failed to persist field mappings", e);
         }
@@ -123,20 +154,34 @@ public class InteropController {
     
     @GetMapping("/pipeline/review")
     public ResponseEntity<ApiResponse<List<org.akaza.openclinica.modern.dto.StagedRecordDto>>> pipelineReview() {
+        Authentication auth = getAuthenticatedUser();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         return ResponseEntity.ok(new ApiResponse<>(interopService.getReviewQueueWithMetadata()));
     }
 
     @PostMapping("/pipeline/commit")
     public ResponseEntity<ApiResponse<String>> pipelineCommit(@RequestParam String recordId) {
-        interopService.commit(recordId);
-        log.info("Commit action: user 'system' committed recordId: {}", recordId);
+        Authentication auth = getAuthenticatedUser();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String userName = auth.getName();
+        interopService.commit(recordId, userName);
+        log.info("Commit action: user '{}' committed recordId: {}", userName, recordId);
         return ResponseEntity.ok(new ApiResponse<>("Data committed"));
     }
 
     @PostMapping("/pipeline/batch-commit")
     public ResponseEntity<ApiResponse<String>> pipelineBatchCommit(@RequestBody List<String> recordIds) {
-        interopService.batchCommit(recordIds);
-        log.info("Commit action: user 'system' committed batch of {} records", recordIds.size());
+        Authentication auth = getAuthenticatedUser();
+        if (auth == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String userName = auth.getName();
+        interopService.batchCommit(recordIds, userName);
+        log.info("Commit action: user '{}' committed batch of {} records", userName, recordIds.size());
         return ResponseEntity.ok(new ApiResponse<>(recordIds.size() + " records batch committed"));
     }
 }
