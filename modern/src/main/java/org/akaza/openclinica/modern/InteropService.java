@@ -150,18 +150,66 @@ public class InteropService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void validate(String recordId, String payload) {
+    public void validate(String recordId, String payload, String userName) {
         recordsInStaging.put(recordId, payload);
-        draftService.saveDraftWithId(recordId, "system", DRAFT_TYPE, payload);
-        log.info("Ingested and staged clinical record: {}", recordId);
+        String activeUser = (userName != null && !userName.trim().isEmpty()) ? userName : "system_background";
+        draftService.saveDraftWithId(recordId, activeUser, DRAFT_TYPE, payload);
+        log.info("Ingested and staged clinical record: {} by user '{}'", recordId, activeUser);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void validate(String recordId, String payload) {
+        validate(recordId, payload, null);
     }
 
     public List<String> getReviewQueue() {
         return new ArrayList<>(recordsInStaging.keySet());
     }
 
+    public UserAccount resolveUserAccount(String userName) {
+        if (userName != null && !userName.trim().isEmpty()) {
+            try {
+                List<UserAccount> list = entityManager.createQuery("SELECT u FROM UserAccount u WHERE u.userName = :uname", UserAccount.class)
+                        .setParameter("uname", userName)
+                        .setMaxResults(1)
+                        .getResultList();
+                if (!list.isEmpty()) {
+                    return list.get(0);
+                }
+            } catch (Exception e) {
+                log.warn("Could not find UserAccount by username {}", userName, e);
+            }
+        }
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+                String authName = auth.getName();
+                List<UserAccount> list = entityManager.createQuery("SELECT u FROM UserAccount u WHERE u.userName = :uname", UserAccount.class)
+                        .setParameter("uname", authName)
+                        .setMaxResults(1)
+                        .getResultList();
+                if (!list.isEmpty()) {
+                    return list.get(0);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not find UserAccount by auth context", e);
+        }
+        try {
+            List<UserAccount> list = entityManager.createQuery("SELECT u FROM UserAccount u ORDER BY u.userId ASC", UserAccount.class)
+                    .setMaxResults(1)
+                    .getResultList();
+            if (!list.isEmpty()) {
+                return list.get(0);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to find fallback UserAccount in database", e);
+        }
+        return null;
+    }
+
     @Transactional(rollbackFor = Exception.class)
-    public void commit(String recordId) {
+    public void commit(String recordId, String userName) {
         String payload = recordsInStaging.get(recordId);
         if (payload == null) {
             throw new IllegalArgumentException("Record not found in staging: " + recordId);
@@ -217,10 +265,13 @@ public class InteropService {
             final String fTargetFormVersion = targetFormVersion;
             final String fTargetField = targetField;
 
-            workflowService.executeWorkflowTransaction(1L, payloadObj, new WorkflowTransactionCallback<Void>() {
+            UserAccount activeUser = resolveUserAccount(userName);
+            Long userId = (activeUser != null) ? (long) activeUser.getUserId() : 0L;
+
+            workflowService.executeWorkflowTransaction(userId, payloadObj, new WorkflowTransactionCallback<Void>() {
                 @Override
                 public Void doInTransaction() {
-                    processClinicalRecord(fSubjectId, fEventId, fValue, fTargetStudy, fTargetFormVersion, fTargetField);
+                    processClinicalRecord(fSubjectId, fEventId, fValue, fTargetStudy, fTargetFormVersion, fTargetField, activeUser);
                     return null;
                 }
             });
@@ -239,7 +290,12 @@ public class InteropService {
         }
     }
 
-    public void batchCommit(List<String> recordIds) {
+    @Transactional(rollbackFor = Exception.class)
+    public void commit(String recordId) {
+        commit(recordId, null);
+    }
+
+    public void batchCommit(List<String> recordIds, String userName) {
         syncSemaphoreLimit();
         try {
             semaphore.acquire();
@@ -302,6 +358,9 @@ public class InteropService {
             int count = validatedRecords.size();
             if (count == 0) return;
 
+            UserAccount activeUser = resolveUserAccount(userName);
+            Long userId = (activeUser != null) ? (long) activeUser.getUserId() : 0L;
+
             TransactionTemplate tt = new TransactionTemplate(transactionManager);
             tt.setPropagationBehavior(TransactionTemplate.PROPAGATION_REQUIRES_NEW);
 
@@ -321,10 +380,10 @@ public class InteropService {
                                 String targetFormVersion = mappings.get("target_form_version");
                                 String targetField = mappings.get("target_field");
 
-                                workflowService.executeWorkflowTransaction(1L, payloadObj, new WorkflowTransactionCallback<Void>() {
+                                workflowService.executeWorkflowTransaction(userId, payloadObj, new WorkflowTransactionCallback<Void>() {
                                     @Override
                                     public Void doInTransaction() {
-                                        processClinicalRecord(br.subjectId, br.eventId, br.value, targetStudy, targetFormVersion, targetField);
+                                        processClinicalRecord(br.subjectId, br.eventId, br.value, targetStudy, targetFormVersion, targetField, activeUser);
                                         return null;
                                     }
                                 });
@@ -350,7 +409,20 @@ public class InteropService {
         }
     }
 
+    public void batchCommit(List<String> recordIds) {
+        batchCommit(recordIds, null);
+    }
+
     private void processClinicalRecord(String fSubjectId, String fEventId, String fValue, String targetStudyId, String targetFormVersionId, String targetFieldId) {
+        processClinicalRecord(fSubjectId, fEventId, fValue, targetStudyId, targetFormVersionId, targetFieldId, null);
+    }
+
+    private void processClinicalRecord(String fSubjectId, String fEventId, String fValue, String targetStudyId, String targetFormVersionId, String targetFieldId, UserAccount activeUser) {
+        if (activeUser == null) {
+            activeUser = resolveUserAccount(null);
+        }
+        UserAccount owner = activeUser;
+
         StudySubject ss = null;
         try {
             ss = entityManager.createQuery("SELECT ss FROM StudySubject ss WHERE ss.ocOid = :id OR ss.label = :id", StudySubject.class)
@@ -374,7 +446,6 @@ public class InteropService {
             Status stat = Status.getByCode(1);
             ss.setStatus(stat);
             ss.setDateCreated(new java.util.Date());
-            UserAccount owner = entityManager.find(UserAccount.class, 1);
             ss.setUserAccount(owner);
             entityManager.persist(ss);
         }
@@ -394,7 +465,6 @@ public class InteropService {
         se.setStudyEventDefinition(sed);
         se.setStatusId(1);
         se.setDateCreated(new java.util.Date());
-        UserAccount owner = entityManager.find(UserAccount.class, 1);
         se.setUserAccount(owner);
         entityManager.persist(se);
 

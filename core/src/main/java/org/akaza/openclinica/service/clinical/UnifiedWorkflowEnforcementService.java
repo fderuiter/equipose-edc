@@ -112,7 +112,7 @@ public class UnifiedWorkflowEnforcementService {
 
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRED, rollbackFor = Exception.class)
     public <T> T executeWorkflowTransaction(
-            Long studyId, 
+            Long userId, 
             org.akaza.openclinica.model.ClinicalPayload payload, 
             WorkflowTransactionCallback<T> callback) {
 
@@ -123,6 +123,7 @@ public class UnifiedWorkflowEnforcementService {
         
         org.springframework.jdbc.core.JdbcTemplate jdbcTemplate = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
         
+        Long studyId = 1L;
         // Pessimistic Locking
         try {
             jdbcTemplate.execute("SELECT study_id FROM study WHERE study_id = " + studyId + " FOR UPDATE");
@@ -155,10 +156,10 @@ public class UnifiedWorkflowEnforcementService {
             org.akaza.openclinica.bean.admin.AuditEventBean auditEvent = new org.akaza.openclinica.bean.admin.AuditEventBean();
             auditEvent.setAuditDate(new Date());
             auditEvent.setAuditTable("item_data");
-            auditEvent.setEntityId(1);
+            auditEvent.setEntityId(userId != null ? userId.intValue() : 0);
             auditEvent.setReasonForChange("Automated integration data update");
             auditEvent.setActionMessage("Imported clinical payload for subject: " + payload.getSubjectId());
-            auditEvent.setUpdaterId(1);
+            auditEvent.setUpdaterId(userId != null ? userId.intValue() : 0);
             auditService.logEvent(auditEvent, null);
         } catch (Exception e) {
             logger.warn("Audit logging failed", e);
