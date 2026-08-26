@@ -5,6 +5,7 @@ import org.akaza.openclinica.domain.datamap.AuditLogEventType;
 import org.akaza.openclinica.domain.datamap.StudySubject;
 import org.akaza.openclinica.domain.datamap.EventCrf;
 import org.akaza.openclinica.domain.datamap.ItemData;
+import org.akaza.openclinica.exception.AuditSequenceException;
 import org.hibernate.event.spi.PostInsertEvent;
 import org.hibernate.event.spi.PostInsertEventListener;
 import org.hibernate.event.spi.PostUpdateEvent;
@@ -60,7 +61,13 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
 
     private void handleAudit(Object entity, String action, StatelessSession session) {
         if (entity instanceof AuditLogEvent) {
-            session.close();
+            if (session != null) {
+                try {
+                    session.close();
+                } catch (Exception ignored) {
+                    // Ignore
+                }
+            }
             return;
         }
         
@@ -81,7 +88,13 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
         }
         
         if (auditTable == null) {
-            session.close();
+            if (session != null) {
+                try {
+                    session.close();
+                } catch (Exception ignored) {
+                    // Ignore
+                }
+            }
             return;
         }
 
@@ -91,10 +104,14 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
                 Object result = session.createNativeQuery("SELECT nextval('audit_log_event_audit_id_seq')").getSingleResult();
                 if (result != null) {
                     auditEvent.setAuditId(((Number) result).intValue());
+                } else {
+                    throw new AuditSequenceException("Audit sequence retrieval returned null for table: " + auditTable);
                 }
             } catch (Exception e) {
-                System.out.println("MANUAL SEQ FETCH FAILED: " + e.getMessage());
-                e.printStackTrace();
+                if (e instanceof AuditSequenceException) {
+                    throw (AuditSequenceException) e;
+                }
+                throw new AuditSequenceException("Failed to retrieve audit sequence for table: " + auditTable, e);
             }
             auditEvent.setAuditDate(new Date());
             auditEvent.setAuditTable(auditTable);
@@ -108,7 +125,13 @@ public class AuditEventListener implements PostInsertEventListener, PostUpdateEv
             
             session.insert(auditEvent);
         } finally {
-            session.close();
+            if (session != null) {
+                try {
+                    session.close();
+                } catch (Exception ignored) {
+                    // Ignore secondary close exceptions to ensure AuditSequenceException propagates
+                }
+            }
         }
     }
 }
