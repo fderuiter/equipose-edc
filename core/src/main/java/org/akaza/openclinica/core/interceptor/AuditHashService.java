@@ -86,17 +86,17 @@ public class AuditHashService {
         }
     }
 
-    public String computeHash(AuditLogEvent event, String previousHash) {
+    public static String computeHashValues(String previousHash, String auditTable, Object entityId, String entityName, String reasonForChange, String oldValue, String newValue) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             StringBuilder sb = new StringBuilder();
             sb.append(previousHash == null ? "ROOT" : previousHash);
-            sb.append("|").append(event.getAuditTable() != null ? event.getAuditTable() : "");
-            sb.append("|").append(event.getEntityId() != null ? event.getEntityId() : "");
-            sb.append("|").append(event.getEntityName() != null ? event.getEntityName() : "");
-            sb.append("|").append(event.getReasonForChange() != null ? event.getReasonForChange() : "");
-            sb.append("|").append(event.getOldValue() != null ? event.getOldValue() : "");
-            sb.append("|").append(event.getNewValue() != null ? event.getNewValue() : "");
+            sb.append("|").append(auditTable != null ? auditTable : "");
+            sb.append("|").append(entityId != null ? entityId : "");
+            sb.append("|").append(entityName != null ? entityName : "");
+            sb.append("|").append(reasonForChange != null ? reasonForChange : "");
+            sb.append("|").append(oldValue != null ? oldValue : "");
+            sb.append("|").append(newValue != null ? newValue : "");
             
             byte[] hash = digest.digest(sb.toString().getBytes(StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
@@ -108,6 +108,51 @@ public class AuditHashService {
             return hexString.toString();
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 algorithm not found", e);
+        }
+    }
+
+    public String computeHash(AuditLogEvent event, String previousHash) {
+        return computeHashValues(
+            previousHash,
+            event.getAuditTable(),
+            event.getEntityId(),
+            event.getEntityName(),
+            event.getReasonForChange(),
+            event.getOldValue(),
+            event.getNewValue()
+        );
+    }
+
+    public synchronized String saveAndChain(AuditLogEvent event) {
+        if (sessionFactory == null) {
+            return null;
+        }
+        StatelessSession session = sessionFactory.openStatelessSession();
+        try {
+            session.getTransaction().begin();
+            Query<AuditLogEvent> lastSealedQ = session.createQuery(
+                "FROM AuditLogEvent WHERE chainHash IS NOT NULL AND chainHash != 'LEGACY_UNCHAINED' ORDER BY auditId DESC", AuditLogEvent.class);
+            lastSealedQ.setMaxResults(1);
+            AuditLogEvent lastSealed = lastSealedQ.uniqueResult();
+            String prevHash = lastSealed != null ? lastSealed.getChainHash() : null;
+            
+            String newHash = computeHash(event, prevHash);
+            event.setChainHash(newHash);
+            
+            if (event.getAuditDate() == null) {
+                event.setAuditDate(new java.util.Date());
+            }
+            
+            session.insert(event);
+            session.getTransaction().commit();
+            return newHash;
+        } catch (Exception e) {
+            if (session.getTransaction().isActive()) {
+                session.getTransaction().rollback();
+            }
+            throw e;
+        } finally {
+            session.close();
         }
     }
 
