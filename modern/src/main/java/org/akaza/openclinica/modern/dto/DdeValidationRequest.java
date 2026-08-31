@@ -1,8 +1,16 @@
 package org.akaza.openclinica.modern.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 public class DdeValidationRequest {
+
+    @NotNull(message = "studyId is required")
+    @JsonProperty("studyId")
+    @JsonAlias({"study_id", "studyId"})
+    private Integer studyId;
 
     @NotBlank(message = "subjectOid is required")
     private String subjectOid;
@@ -14,6 +22,14 @@ public class DdeValidationRequest {
     private String value;
 
     private String override;
+
+    public Integer getStudyId() {
+        return studyId;
+    }
+
+    public void setStudyId(Integer studyId) {
+        this.studyId = studyId;
+    }
 
     public String getSubjectOid() {
         return subjectOid;

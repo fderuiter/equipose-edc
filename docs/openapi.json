@@ -1144,11 +1144,15 @@
       "DdeValidationRequest": {
         "required": [
           "itemOid",
+          "studyId",
           "subjectOid",
           "value"
         ],
         "type": "object",
         "properties": {
+          "studyId": {
+            "type": "integer"
+          },
           "subjectOid": {
             "type": "string"
           },

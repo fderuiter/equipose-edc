@@ -245,30 +245,61 @@ public class LegacyMigrationAuthenticationProvider implements AuthenticationProv
         return (int) (System.currentTimeMillis() & 0xfffffff); // Fallback if sequence lookup fails
     }
 
-    private int getDefaultStudyId() {
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT study_id, tenant_id FROM study ORDER BY study_id ASC LIMIT 1");
-             ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) {
-                return rs.getInt(1);
-            }
-        } catch (SQLException e) {
-            logger.error("Failed to retrieve default study id", e);
+    private boolean isTenantBypass() {
+        try {
+            Class<?> clazz = Class.forName("org.akaza.openclinica.modern.security.TenantContext");
+            java.lang.reflect.Method method = clazz.getMethod("isBypass");
+            return (Boolean) method.invoke(null);
+        } catch (Exception e) {
+            return false;
         }
-        return 1;
+    }
+
+    private void setTenantBypass(boolean bypass) {
+        try {
+            Class<?> clazz = Class.forName("org.akaza.openclinica.modern.security.TenantContext");
+            java.lang.reflect.Method method = clazz.getMethod("setBypass", boolean.class);
+            method.invoke(null, bypass);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private int getDefaultStudyId() {
+        boolean prevBypass = isTenantBypass();
+        try {
+            setTenantBypass(true);
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement ps = conn.prepareStatement("SELECT study_id, tenant_id FROM study ORDER BY study_id ASC LIMIT 1");
+                 ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            } catch (SQLException e) {
+                logger.error("Failed to retrieve default study id", e);
+            }
+            return 1;
+        } finally {
+            setTenantBypass(prevBypass);
+        }
     }
 
     private boolean isStudyIdValid(int studyId) {
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT 1, tenant_id FROM study WHERE study_id = ?")) {
-            ps.setInt(1, studyId);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+        boolean prevBypass = isTenantBypass();
+        try {
+            setTenantBypass(true);
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement ps = conn.prepareStatement("SELECT 1, tenant_id FROM study WHERE study_id = ?")) {
+                ps.setInt(1, studyId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            } catch (SQLException e) {
+                logger.error("Failed to validate study id: " + studyId, e);
             }
-        } catch (SQLException e) {
-            logger.error("Failed to validate study id: " + studyId, e);
+            return false;
+        } finally {
+            setTenantBypass(prevBypass);
         }
-        return false;
     }
 
     private static class LegacyUser {

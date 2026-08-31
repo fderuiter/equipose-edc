@@ -16,13 +16,14 @@ import java.util.regex.Pattern;
 
 public class TenantContext {
     private static final ThreadLocal<String> CURRENT_TENANT = new ThreadLocal<>();
+    private static final ThreadLocal<Integer> CURRENT_STUDY = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> BYPASS = ThreadLocal.withInitial(() -> false);
 
     private static final Set<String> WHITELIST = Set.of(
         "tenant-a", "tenant-b", "tenant-c", "tenant-1", "tenant-2", "tenant-alpha", "tenant-beta"
     );
 
-    private static final Pattern STUDY_TABLE_PATTERN = Pattern.compile("(?i)(?<![\\._])\\bstudy\\b(?![\\._])");
+    private static final Pattern STUDY_TABLE_PATTERN = Pattern.compile("(?i)(?<![\\._])\\b(study|dde_records)\\b(?![\\._])");
 
     public static void setCurrentTenant(String tenantId) {
         CURRENT_TENANT.set(tenantId);
@@ -30,6 +31,14 @@ public class TenantContext {
 
     public static String getCurrentTenant() {
         return CURRENT_TENANT.get();
+    }
+
+    public static void setCurrentStudy(Integer studyId) {
+        CURRENT_STUDY.set(studyId);
+    }
+
+    public static Integer getCurrentStudy() {
+        return CURRENT_STUDY.get();
     }
 
     public static void setBypass(boolean bypass) {
@@ -46,6 +55,7 @@ public class TenantContext {
 
     public static void clear() {
         CURRENT_TENANT.remove();
+        CURRENT_STUDY.remove();
         BYPASS.remove();
     }
 
@@ -58,7 +68,7 @@ public class TenantContext {
             return sql;
         }
 
-        // Check if query targets the tenant-isolated STUDY table
+        // Check if query targets tenant-isolated tables (study or dde_records)
         if (!STUDY_TABLE_PATTERN.matcher(sql).find()) {
             return sql;
         }
@@ -71,31 +81,40 @@ public class TenantContext {
             return sql;
         }
 
-        // If query already contains explicit tenant_id column or filter, return as-is
-        if (upper.contains("TENANT_ID = ") || upper.contains("TENANT_ID=") || upper.contains("TENANT_ID IS") || upper.contains(", TENANT_ID")) {
-            return sql;
-        }
-
         String tenantId = getCurrentTenant();
-        if (tenantId == null || tenantId.trim().isEmpty()) {
-            throw new IllegalStateException("Missing active tenant context for tenant-isolated query");
-        }
 
         // 1. INSERT statement
-        if (upper.startsWith("INSERT INTO STUDY") || upper.startsWith("INSERT INTO \"STUDY\"")) {
+        if (upper.startsWith("INSERT INTO STUDY") || upper.startsWith("INSERT INTO \"STUDY\"") ||
+            upper.startsWith("INSERT INTO DDE_RECORDS") || upper.startsWith("INSERT INTO \"DDE_RECORDS\"")) {
             int valuesIndex = upper.indexOf("VALUES");
             if (valuesIndex != -1) {
                 String colsPart = trimmed.substring(0, valuesIndex).trim();
                 String valsPart = trimmed.substring(valuesIndex).trim();
 
                 int lastParenCol = colsPart.lastIndexOf(')');
-                if (lastParenCol != -1) {
-                    colsPart = colsPart.substring(0, lastParenCol) + ", tenant_id" + colsPart.substring(lastParenCol);
-                }
-
                 int lastParenVal = valsPart.lastIndexOf(')');
-                if (lastParenVal != -1) {
-                    valsPart = valsPart.substring(0, lastParenVal) + ", '" + tenantId.replace("'", "''") + "'" + valsPart.substring(lastParenVal);
+
+                if (lastParenCol != -1 && lastParenVal != -1) {
+                    String colsToAdd = "";
+                    String valsToAdd = "";
+
+                    if (!colsPart.toUpperCase().contains("TENANT_ID")) {
+                        if (tenantId == null || tenantId.trim().isEmpty()) {
+                            throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + sql);
+                        }
+                        colsToAdd += ", tenant_id";
+                        valsToAdd += ", '" + tenantId.replace("'", "''") + "'";
+                    }
+
+                    if (upper.contains("DDE_RECORDS") && !colsPart.toUpperCase().contains("STUDY_ID") && getCurrentStudy() != null) {
+                        colsToAdd += ", study_id";
+                        valsToAdd += ", " + getCurrentStudy();
+                    }
+
+                    if (!colsToAdd.isEmpty()) {
+                        colsPart = colsPart.substring(0, lastParenCol) + colsToAdd + colsPart.substring(lastParenCol);
+                        valsPart = valsPart.substring(0, lastParenVal) + valsToAdd + valsPart.substring(lastParenVal);
+                    }
                 }
                 return colsPart + " " + valsPart;
             }
@@ -111,9 +130,16 @@ public class TenantContext {
                 Update update = (Update) stmt;
                 if (isTenantRestrictedTable(update.getTable())) {
                     String qualifier = getQualifier(update.getTable());
-                    Expression predicate = createTenantPredicate(qualifier, tenantId);
                     if (!hasTenantPredicate(update.getWhere(), qualifier)) {
+                        if (tenantId == null || tenantId.trim().isEmpty()) {
+                            throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + sql);
+                        }
+                        Expression predicate = createTenantPredicate(qualifier, tenantId);
                         update.setWhere(addAndPredicate(update.getWhere(), predicate));
+                    }
+                    if ("dde_records".equalsIgnoreCase(getTableName(update.getTable())) && getCurrentStudy() != null && !hasStudyPredicate(update.getWhere(), qualifier)) {
+                        Expression studyPredicate = createStudyPredicate(qualifier, getCurrentStudy());
+                        update.setWhere(addAndPredicate(update.getWhere(), studyPredicate));
                     }
                     return update.toString();
                 }
@@ -121,9 +147,16 @@ public class TenantContext {
                 Delete delete = (Delete) stmt;
                 if (isTenantRestrictedTable(delete.getTable())) {
                     String qualifier = getQualifier(delete.getTable());
-                    Expression predicate = createTenantPredicate(qualifier, tenantId);
                     if (!hasTenantPredicate(delete.getWhere(), qualifier)) {
+                        if (tenantId == null || tenantId.trim().isEmpty()) {
+                            throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + sql);
+                        }
+                        Expression predicate = createTenantPredicate(qualifier, tenantId);
                         delete.setWhere(addAndPredicate(delete.getWhere(), predicate));
+                    }
+                    if ("dde_records".equalsIgnoreCase(getTableName(delete.getTable())) && getCurrentStudy() != null && !hasStudyPredicate(delete.getWhere(), qualifier)) {
+                        Expression studyPredicate = createStudyPredicate(qualifier, getCurrentStudy());
+                        delete.setWhere(addAndPredicate(delete.getWhere(), studyPredicate));
                     }
                     return delete.toString();
                 }
@@ -223,9 +256,16 @@ public class TenantContext {
             Table table = (Table) fromItem;
             if (isTenantRestrictedTable(table)) {
                 String qualifier = getQualifier(table);
-                Expression predicate = createTenantPredicate(qualifier, tenantId);
                 if (!hasTenantPredicate(plainSelect.getWhere(), qualifier)) {
+                    if (tenantId == null || tenantId.trim().isEmpty()) {
+                        throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + plainSelect);
+                    }
+                    Expression predicate = createTenantPredicate(qualifier, tenantId);
                     plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), predicate));
+                }
+                if ("dde_records".equalsIgnoreCase(getTableName(table)) && getCurrentStudy() != null && !hasStudyPredicate(plainSelect.getWhere(), qualifier)) {
+                    Expression studyPredicate = createStudyPredicate(qualifier, getCurrentStudy());
+                    plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), studyPredicate));
                 }
             }
         } else if (fromItem instanceof ParenthesedSelect) {
@@ -253,7 +293,6 @@ public class TenantContext {
             Table table = (Table) rightItem;
             if (isTenantRestrictedTable(table)) {
                 String qualifier = getQualifier(table);
-                Expression predicate = createTenantPredicate(qualifier, tenantId);
                 boolean alreadyHas = false;
                 if (join.getOnExpressions() != null) {
                     for (Expression onExpr : join.getOnExpressions()) {
@@ -263,16 +302,49 @@ public class TenantContext {
                         }
                     }
                 }
+                if (!alreadyHas && (join.isSimple() || join.isCross())) {
+                    if (hasTenantPredicate(plainSelect.getWhere(), qualifier)) {
+                        alreadyHas = true;
+                    }
+                }
                 if (!alreadyHas) {
+                    if (tenantId == null || tenantId.trim().isEmpty()) {
+                        throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + plainSelect);
+                    }
+                    Expression predicate = createTenantPredicate(qualifier, tenantId);
                     if (join.getOnExpressions() != null && !join.getOnExpressions().isEmpty()) {
                         join.addOnExpression(predicate);
                     } else {
                         if (join.isSimple() || join.isCross()) {
-                            if (!hasTenantPredicate(plainSelect.getWhere(), qualifier)) {
-                                plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), predicate));
-                            }
+                            plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), predicate));
                         } else {
                             join.addOnExpression(predicate);
+                        }
+                    }
+                }
+
+                if ("dde_records".equalsIgnoreCase(getTableName(table)) && getCurrentStudy() != null) {
+                    Expression studyPredicate = createStudyPredicate(qualifier, getCurrentStudy());
+                    boolean alreadyHasStudy = false;
+                    if (join.getOnExpressions() != null) {
+                        for (Expression onExpr : join.getOnExpressions()) {
+                            if (hasStudyPredicate(onExpr, qualifier)) {
+                                alreadyHasStudy = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!alreadyHasStudy) {
+                        if (join.getOnExpressions() != null && !join.getOnExpressions().isEmpty()) {
+                            join.addOnExpression(studyPredicate);
+                        } else {
+                            if (join.isSimple() || join.isCross()) {
+                                if (!hasStudyPredicate(plainSelect.getWhere(), qualifier)) {
+                                    plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), studyPredicate));
+                                }
+                            } else {
+                                join.addOnExpression(studyPredicate);
+                            }
                         }
                     }
                 }
@@ -315,22 +387,31 @@ public class TenantContext {
     }
 
     private static boolean isTenantRestrictedTable(Table table) {
-        if (table == null || table.getName() == null) return false;
-        String name = table.getName().replaceAll("^\"|\"$", "");
-        return "study".equalsIgnoreCase(name);
+        String name = getTableName(table);
+        return "study".equalsIgnoreCase(name) || "dde_records".equalsIgnoreCase(name);
+    }
+
+    private static String getTableName(Table table) {
+        if (table == null || table.getName() == null) return "";
+        return table.getName().replaceAll("^\"|\"$", "");
     }
 
     private static String getQualifier(Table table) {
         if (table.getAlias() != null && table.getAlias().getName() != null && !table.getAlias().getName().trim().isEmpty()) {
             return table.getAlias().getName().trim();
         }
-        return table.getName().replaceAll("^\"|\"$", "");
+        return getTableName(table);
     }
 
     private static Expression createTenantPredicate(String qualifier, String tenantId) {
         String sanitizedTenantId = tenantId.replace("'", "''");
         Column col = new Column(new Table(qualifier), "tenant_id");
         return new EqualsTo(col, new StringValue(sanitizedTenantId));
+    }
+
+    private static Expression createStudyPredicate(String qualifier, Integer studyId) {
+        Column col = new Column(new Table(qualifier), "study_id");
+        return new EqualsTo(col, new LongValue(studyId));
     }
 
     private static Expression addAndPredicate(Expression currentWhere, Expression predicate) {
@@ -344,5 +425,11 @@ public class TenantContext {
         if (expr == null) return false;
         String exprStr = expr.toString().toUpperCase();
         return exprStr.contains("TENANT_ID =") || exprStr.contains("TENANT_ID=") || exprStr.contains("TENANT_ID IS");
+    }
+
+    private static boolean hasStudyPredicate(Expression expr, String qualifier) {
+        if (expr == null) return false;
+        String exprStr = expr.toString().toUpperCase();
+        return exprStr.contains("STUDY_ID =") || exprStr.contains("STUDY_ID=") || exprStr.contains("STUDY_ID IS");
     }
 }
