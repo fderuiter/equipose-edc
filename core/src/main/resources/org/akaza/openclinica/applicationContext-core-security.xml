@@ -32,6 +32,11 @@
 
     <bean id="oidcRopcAuthenticationProvider" class="org.akaza.openclinica.core.OidcRopcAuthenticationProvider">
         <property name="userDetailsService" ref="ocUserDetailsService"/>
+        <property name="auditUserLoginDao" ref="auditUserLoginDao"/>
+        <property name="auditLogEventDao" ref="auditLogEventDaoDomain"/>
+        <property name="auditHashService" ref="auditHashService"/>
+        <property name="sessionFactory" ref="sessionFactory"/>
+        <property name="dataSource" ref="dataSource"/>
     </bean>
 
     <bean id="securityManager" class="org.akaza.openclinica.core.SecurityManager">

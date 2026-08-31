@@ -20,6 +20,17 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 
+import org.akaza.openclinica.dao.hibernate.AuditUserLoginDao;
+import org.akaza.openclinica.dao.hibernate.AuditLogEventDao;
+import org.akaza.openclinica.domain.technicaladmin.AuditUserLoginBean;
+import org.akaza.openclinica.domain.technicaladmin.LoginStatus;
+import org.akaza.openclinica.domain.datamap.AuditLogEvent;
+import org.akaza.openclinica.domain.datamap.AuditLogEventType;
+import org.akaza.openclinica.core.interceptor.AuditHashService;
+import org.hibernate.SessionFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import javax.sql.DataSource;
+
 /**
  * AuthenticationProvider for OIDC Resource Owner Password Credentials (ROPC)
  * electronic signature verification.
@@ -30,12 +41,67 @@ public class OidcRopcAuthenticationProvider implements AuthenticationProvider {
 
     private UserDetailsService userDetailsService;
 
+    @Autowired(required = false)
+    private AuditUserLoginDao auditUserLoginDao;
+
+    @Autowired(required = false)
+    private AuditLogEventDao auditLogEventDao;
+
+    @Autowired(required = false)
+    private AuditHashService auditHashService;
+
+    @Autowired(required = false)
+    private SessionFactory sessionFactory;
+
+    @Autowired(required = false)
+    private DataSource dataSource;
+
     public UserDetailsService getUserDetailsService() {
         return userDetailsService;
     }
 
     public void setUserDetailsService(UserDetailsService userDetailsService) {
         this.userDetailsService = userDetailsService;
+    }
+
+    public AuditUserLoginDao getAuditUserLoginDao() {
+        return auditUserLoginDao;
+    }
+
+    public void setAuditUserLoginDao(AuditUserLoginDao auditUserLoginDao) {
+        this.auditUserLoginDao = auditUserLoginDao;
+    }
+
+    public AuditLogEventDao getAuditLogEventDao() {
+        return auditLogEventDao;
+    }
+
+    public void setAuditLogEventDao(AuditLogEventDao auditLogEventDao) {
+        this.auditLogEventDao = auditLogEventDao;
+    }
+
+    public AuditHashService getAuditHashService() {
+        return auditHashService;
+    }
+
+    public void setAuditHashService(AuditHashService auditHashService) {
+        this.auditHashService = auditHashService;
+    }
+
+    public SessionFactory getSessionFactory() {
+        return sessionFactory;
+    }
+
+    public void setSessionFactory(SessionFactory sessionFactory) {
+        this.sessionFactory = sessionFactory;
+    }
+
+    public DataSource getDataSource() {
+        return dataSource;
+    }
+
+    public void setDataSource(DataSource dataSource) {
+        this.dataSource = dataSource;
     }
 
     @Override
@@ -80,9 +146,17 @@ public class OidcRopcAuthenticationProvider implements AuthenticationProvider {
 
         logger.info("Attempting OIDC ROPC electronic signature verification for user: {}", username);
 
-        boolean success = verifyRopc(tokenEndpoint, username, rawPassword);
+        boolean success = false;
+        try {
+            success = verifyRopc(tokenEndpoint, username, rawPassword);
+        } catch (Exception e) {
+            logger.warn("Exception during OIDC ROPC authentication attempt: {}", e.getMessage());
+            success = false;
+        }
+
         if (success) {
             logger.info("OIDC ROPC signature verification succeeded for user: {}", username);
+            recordAudit(username, true, "OIDC ROPC signature verification succeeded");
             return new UsernamePasswordAuthenticationToken(
                     userDetails != null ? userDetails : username,
                     rawPassword,
@@ -90,7 +164,89 @@ public class OidcRopcAuthenticationProvider implements AuthenticationProvider {
             );
         } else {
             logger.warn("OIDC ROPC signature verification failed for user: {}", username);
+            recordAudit(username, false, "OIDC ROPC signature verification failed");
             throw new BadCredentialsException("Invalid OIDC credentials");
+        }
+    }
+
+    public void recordAudit(String username, boolean success, String details) {
+        try {
+            if (auditUserLoginDao != null) {
+                AuditUserLoginBean loginBean = new AuditUserLoginBean();
+                loginBean.setUserName(username);
+                loginBean.setLoginAttemptDate(new java.util.Date());
+                loginBean.setLoginStatus(success ? LoginStatus.SUCCESSFUL_LOGIN : LoginStatus.FAILED_LOGIN);
+                loginBean.setDetails(details);
+                auditUserLoginDao.saveOrUpdate(loginBean);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to save AuditUserLoginBean: {}", e.getMessage());
+        }
+
+        try {
+            AuditLogEvent event = new AuditLogEvent();
+            event.setAuditDate(new java.util.Date());
+            event.setAuditTable("user_account");
+            event.setEntityName(username);
+            event.setReasonForChange(details);
+            
+            AuditLogEventType eventType = new AuditLogEventType();
+            eventType.setAuditLogEventTypeId(success ? 44 : 45);
+            event.setAuditLogEventType(eventType);
+
+            if (auditHashService != null && sessionFactory != null) {
+                auditHashService.saveAndChain(event);
+            } else if (auditLogEventDao != null) {
+                auditLogEventDao.saveOrUpdate(event);
+            } else if (dataSource != null) {
+                recordAuditDirect(username, success, details);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to save AuditLogEvent for OIDC authentication: {}", e.getMessage());
+        }
+    }
+
+    private void recordAuditDirect(String username, boolean success, String details) {
+        if (dataSource == null) {
+            return;
+        }
+        try (java.sql.Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            
+            try (java.sql.PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO audit_user_login (user_name, login_attempt_date, login_status_code, details) VALUES (?, NOW(), ?, ?)")) {
+                ps.setString(1, username);
+                ps.setInt(2, success ? 1 : 2);
+                ps.setString(3, details);
+                ps.executeUpdate();
+            }
+
+            String prevHash = null;
+            try (java.sql.PreparedStatement ps = conn.prepareStatement(
+                    "SELECT chain_hash FROM audit_log_event WHERE chain_hash IS NOT NULL AND chain_hash != 'LEGACY_UNCHAINED' ORDER BY audit_id DESC LIMIT 1");
+                 java.sql.ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    prevHash = rs.getString(1);
+                }
+            }
+
+            String auditTable = "user_account";
+            int typeId = success ? 44 : 45;
+            String newHash = AuditHashService.computeHashValues(prevHash, auditTable, null, username, details, null, null);
+
+            try (java.sql.PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO audit_log_event (audit_date, audit_table, entity_name, reason_for_change, audit_log_event_type_id, chain_hash) VALUES (NOW(), ?, ?, ?, ?, ?)")) {
+                ps.setString(1, auditTable);
+                ps.setString(2, username);
+                ps.setString(3, details);
+                ps.setInt(4, typeId);
+                ps.setString(5, newHash);
+                ps.executeUpdate();
+            }
+
+            conn.commit();
+        } catch (Exception e) {
+            logger.error("JDBC audit recording failed: {}", e.getMessage());
         }
     }
 

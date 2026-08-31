@@ -477,8 +477,10 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
 
         Integer existingUserId = getUserIdByUsername(username);
 
+        int targetUserId;
         if (existingUserId == null) {
             int newUserId = getNextUserId();
+            targetUserId = newUserId;
             logger.warn("SSO: Provisioning new user " + username + " with ID " + newUserId + ", study ID " + studyId + ", role " + finalRole.getName());
             
             try (java.sql.Connection conn = dataSource.getConnection();
@@ -506,7 +508,18 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                 ps.setInt(8, userTypeId);
                 ps.executeUpdate();
             }
+
+            recordAuditLogEventDirect(
+                "user_account",
+                newUserId,
+                username,
+                "SSO JIT User Auto-Provisioning",
+                "NONE",
+                "firstName=" + firstName + ", lastName=" + lastName + ", email=" + email + ", role=" + finalRole.getName(),
+                1
+            );
         } else {
+            targetUserId = existingUserId;
             logger.warn("SSO: Updating returning user " + username + " with ID " + existingUserId + ", study ID " + studyId + ", role " + finalRole.getName());
             
             try (java.sql.Connection conn = dataSource.getConnection();
@@ -532,12 +545,78 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                 ps.setInt(7, existingUserId);
                 ps.executeUpdate();
             }
+
+            recordAuditLogEventDirect(
+                "user_account",
+                existingUserId,
+                username,
+                "SSO JIT User Profile Update",
+                "EXISTING_USER",
+                "firstName=" + firstName + ", lastName=" + lastName + ", email=" + email + ", role=" + finalRole.getName(),
+                1
+            );
         }
 
         if (!studyUserRoleExists(username, studyId)) {
             insertStudyUserRole(username, studyId, finalRole.getName());
         } else {
             updateStudyUserRole(username, studyId, finalRole.getName());
+        }
+
+        boolean isRoleFallback = (roleName == null || roleName.trim().isEmpty());
+        recordAuditLogEventDirect(
+            "study_user_role",
+            studyId,
+            username,
+            isRoleFallback 
+                ? "Role Fallback Delta: OIDC token missing role claim. Defaulted to RESEARCHASSISTANT" 
+                : "Role Claim Delta: Mapped claim '" + roleName + "' to " + finalRole.getName(),
+            isRoleFallback ? "MISSING_ROLE_CLAIM" : roleName,
+            finalRole.getName(),
+            33
+        );
+    }
+
+    protected void recordAuditLogEventDirect(String auditTable, Integer entityId, String entityName, String reasonForChange, String oldValue, String newValue, int eventTypeId) {
+        if (dataSource == null) {
+            return;
+        }
+        try (java.sql.Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            
+            String prevHash = null;
+            try (java.sql.PreparedStatement ps = conn.prepareStatement(
+                    "SELECT chain_hash FROM audit_log_event WHERE chain_hash IS NOT NULL AND chain_hash != 'LEGACY_UNCHAINED' ORDER BY audit_id DESC LIMIT 1");
+                 java.sql.ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    prevHash = rs.getString(1);
+                }
+            }
+
+            String newHash = org.akaza.openclinica.core.interceptor.AuditHashService.computeHashValues(
+                prevHash, auditTable, entityId, entityName, reasonForChange, oldValue, newValue
+            );
+
+            try (java.sql.PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO audit_log_event (audit_date, audit_table, entity_id, entity_name, reason_for_change, old_value, new_value, audit_log_event_type_id, chain_hash) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                ps.setString(1, auditTable);
+                if (entityId != null) {
+                    ps.setInt(2, entityId);
+                } else {
+                    ps.setNull(2, java.sql.Types.INTEGER);
+                }
+                ps.setString(3, entityName);
+                ps.setString(4, reasonForChange);
+                ps.setString(5, oldValue);
+                ps.setString(6, newValue);
+                ps.setInt(7, eventTypeId);
+                ps.setString(8, newHash);
+                ps.executeUpdate();
+            }
+
+            conn.commit();
+        } catch (Exception e) {
+            logger.error("Failed to write audit_log_event in bridge filter: " + e.getMessage(), e);
         }
     }
 
