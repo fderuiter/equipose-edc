@@ -36,8 +36,15 @@ public class DdeController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Access Denied: Unauthorized study ID");
         }
 
+        String previousTenant = TenantContext.getCurrentTenant();
         Integer previousStudy = TenantContext.getCurrentStudy();
         try {
+            if (previousTenant == null) {
+                String tenantId = getTenantForStudy(studyId);
+                if (tenantId != null) {
+                    TenantContext.setCurrentTenant(tenantId);
+                }
+            }
             TenantContext.setCurrentStudy(studyId);
 
             String subjectOid = payload.getSubjectOid();
@@ -70,12 +77,33 @@ public class DdeController {
                 return ResponseEntity.ok("Verification complete");
             }
         } finally {
+            if (previousTenant == null) {
+                TenantContext.setCurrentTenant(null);
+            } else {
+                TenantContext.setCurrentTenant(previousTenant);
+            }
             if (previousStudy == null) {
                 TenantContext.setCurrentStudy(null);
             } else {
                 TenantContext.setCurrentStudy(previousStudy);
             }
         }
+    }
+
+    private String getTenantForStudy(Integer studyId) {
+        boolean prevBypass = TenantContext.isBypass();
+        try {
+            TenantContext.setBypass(true);
+            List<String> tenants = jdbcTemplate.queryForList("SELECT tenant_id FROM study WHERE study_id = ?", String.class, studyId);
+            if (!tenants.isEmpty() && tenants.get(0) != null && !tenants.get(0).trim().isEmpty()) {
+                return tenants.get(0);
+            }
+        } catch (Exception e) {
+            // ignore
+        } finally {
+            TenantContext.setBypass(prevBypass);
+        }
+        return "default";
     }
 
     private boolean isStudyAuthorized(Integer requestedStudyId, HttpServletRequest request) {

@@ -334,29 +334,49 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
     }
 
     private int getDefaultStudyId() {
-        try (java.sql.Connection conn = dataSource.getConnection();
-             java.sql.PreparedStatement ps = conn.prepareStatement("SELECT study_id FROM study ORDER BY study_id ASC LIMIT 1");
-             java.sql.ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) {
-                return rs.getInt(1);
+        boolean hasTenant = org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant() != null 
+            && !org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant().trim().isEmpty();
+        boolean prevBypass = org.akaza.openclinica.modern.security.TenantContext.isBypass();
+        try {
+            if (!hasTenant) {
+                org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
             }
-        } catch (Exception e) {
-            logger.error("Failed to retrieve default study id", e);
+            try (java.sql.Connection conn = dataSource.getConnection();
+                 java.sql.PreparedStatement ps = conn.prepareStatement("SELECT study_id FROM study ORDER BY study_id ASC LIMIT 1");
+                 java.sql.ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            } catch (Exception e) {
+                logger.error("Failed to retrieve default study id", e);
+            }
+            return 1;
+        } finally {
+            org.akaza.openclinica.modern.security.TenantContext.setBypass(prevBypass);
         }
-        return 1;
     }
 
     private boolean isStudyIdValid(int studyId) {
-        try (java.sql.Connection conn = dataSource.getConnection();
-             java.sql.PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM study WHERE study_id = ?")) {
-            ps.setInt(1, studyId);
-            try (java.sql.ResultSet rs = ps.executeQuery()) {
-                return rs.next();
+        boolean hasTenant = org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant() != null 
+            && !org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant().trim().isEmpty();
+        boolean prevBypass = org.akaza.openclinica.modern.security.TenantContext.isBypass();
+        try {
+            if (!hasTenant) {
+                org.akaza.openclinica.modern.security.TenantContext.setBypass(true);
             }
-        } catch (Exception e) {
-            logger.error("Failed to validate study id: " + studyId, e);
+            try (java.sql.Connection conn = dataSource.getConnection();
+                 java.sql.PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM study WHERE study_id = ?")) {
+                ps.setInt(1, studyId);
+                try (java.sql.ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            } catch (Exception e) {
+                logger.error("Failed to validate study id: " + studyId, e);
+            }
+            return false;
+        } finally {
+            org.akaza.openclinica.modern.security.TenantContext.setBypass(prevBypass);
         }
-        return false;
     }
 
     private Integer getUserIdByUsername(String username) {

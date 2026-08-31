@@ -98,7 +98,10 @@ public class TenantContext {
                     String colsToAdd = "";
                     String valsToAdd = "";
 
-                    if (!colsPart.toUpperCase().contains("TENANT_ID") && tenantId != null && !tenantId.trim().isEmpty()) {
+                    if (!colsPart.toUpperCase().contains("TENANT_ID")) {
+                        if (tenantId == null || tenantId.trim().isEmpty()) {
+                            throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + sql);
+                        }
                         colsToAdd += ", tenant_id";
                         valsToAdd += ", '" + tenantId.replace("'", "''") + "'";
                     }
@@ -127,7 +130,10 @@ public class TenantContext {
                 Update update = (Update) stmt;
                 if (isTenantRestrictedTable(update.getTable())) {
                     String qualifier = getQualifier(update.getTable());
-                    if (tenantId != null && !tenantId.trim().isEmpty() && !hasTenantPredicate(update.getWhere(), qualifier)) {
+                    if (!hasTenantPredicate(update.getWhere(), qualifier)) {
+                        if (tenantId == null || tenantId.trim().isEmpty()) {
+                            throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + sql);
+                        }
                         Expression predicate = createTenantPredicate(qualifier, tenantId);
                         update.setWhere(addAndPredicate(update.getWhere(), predicate));
                     }
@@ -141,7 +147,10 @@ public class TenantContext {
                 Delete delete = (Delete) stmt;
                 if (isTenantRestrictedTable(delete.getTable())) {
                     String qualifier = getQualifier(delete.getTable());
-                    if (tenantId != null && !tenantId.trim().isEmpty() && !hasTenantPredicate(delete.getWhere(), qualifier)) {
+                    if (!hasTenantPredicate(delete.getWhere(), qualifier)) {
+                        if (tenantId == null || tenantId.trim().isEmpty()) {
+                            throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + sql);
+                        }
                         Expression predicate = createTenantPredicate(qualifier, tenantId);
                         delete.setWhere(addAndPredicate(delete.getWhere(), predicate));
                     }
@@ -247,7 +256,10 @@ public class TenantContext {
             Table table = (Table) fromItem;
             if (isTenantRestrictedTable(table)) {
                 String qualifier = getQualifier(table);
-                if (tenantId != null && !tenantId.trim().isEmpty() && !hasTenantPredicate(plainSelect.getWhere(), qualifier)) {
+                if (!hasTenantPredicate(plainSelect.getWhere(), qualifier)) {
+                    if (tenantId == null || tenantId.trim().isEmpty()) {
+                        throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + plainSelect);
+                    }
                     Expression predicate = createTenantPredicate(qualifier, tenantId);
                     plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), predicate));
                 }
@@ -281,28 +293,32 @@ public class TenantContext {
             Table table = (Table) rightItem;
             if (isTenantRestrictedTable(table)) {
                 String qualifier = getQualifier(table);
-                if (tenantId != null && !tenantId.trim().isEmpty()) {
-                    Expression predicate = createTenantPredicate(qualifier, tenantId);
-                    boolean alreadyHas = false;
-                    if (join.getOnExpressions() != null) {
-                        for (Expression onExpr : join.getOnExpressions()) {
-                            if (hasTenantPredicate(onExpr, qualifier)) {
-                                alreadyHas = true;
-                                break;
-                            }
+                boolean alreadyHas = false;
+                if (join.getOnExpressions() != null) {
+                    for (Expression onExpr : join.getOnExpressions()) {
+                        if (hasTenantPredicate(onExpr, qualifier)) {
+                            alreadyHas = true;
+                            break;
                         }
                     }
-                    if (!alreadyHas) {
-                        if (join.getOnExpressions() != null && !join.getOnExpressions().isEmpty()) {
-                            join.addOnExpression(predicate);
+                }
+                if (!alreadyHas && (join.isSimple() || join.isCross())) {
+                    if (hasTenantPredicate(plainSelect.getWhere(), qualifier)) {
+                        alreadyHas = true;
+                    }
+                }
+                if (!alreadyHas) {
+                    if (tenantId == null || tenantId.trim().isEmpty()) {
+                        throw new IllegalStateException("Tenant context is required for queries targeting isolated tables: " + plainSelect);
+                    }
+                    Expression predicate = createTenantPredicate(qualifier, tenantId);
+                    if (join.getOnExpressions() != null && !join.getOnExpressions().isEmpty()) {
+                        join.addOnExpression(predicate);
+                    } else {
+                        if (join.isSimple() || join.isCross()) {
+                            plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), predicate));
                         } else {
-                            if (join.isSimple() || join.isCross()) {
-                                if (!hasTenantPredicate(plainSelect.getWhere(), qualifier)) {
-                                    plainSelect.setWhere(addAndPredicate(plainSelect.getWhere(), predicate));
-                                }
-                            } else {
-                                join.addOnExpression(predicate);
-                            }
+                            join.addOnExpression(predicate);
                         }
                     }
                 }
