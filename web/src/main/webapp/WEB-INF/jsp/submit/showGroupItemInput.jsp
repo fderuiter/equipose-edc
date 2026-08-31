@@ -689,6 +689,19 @@ include the default value first in the select list --%>
 
 			<%-- above for test, adding javascript below to support FF3 tbh 03/2007 --%>
 			<script>
+				function isOriginAllowed<c:out value="${parsedInputName}"/>(origin) {
+					if (!origin) return false;
+					if (origin === window.location.origin) return true;
+					var configured = window.EQUIPOSE_ALLOWED_ORIGINS ||
+									 (window.EquiposeConfig && (window.EquiposeConfig.ALLOWED_ORIGINS || window.EquiposeConfig.allowedOrigins)) ||
+									 window.ALLOWED_ORIGINS ||
+									 window.allowedOrigins;
+					if (!configured) return false;
+					var allowedList = Array.isArray(configured)
+						? configured
+						: String(configured).split(',').map(function(s) { return s.trim(); });
+					return allowedList.indexOf(origin) !== -1;
+				}
 				if (window.attachEvent)
 				{
 					window.attachEvent("onmessage", receiver<c:out value="${parsedInputName}"/>); // for IE
@@ -698,6 +711,12 @@ include the default value first in the select list --%>
 					window.addEventListener("message", receiver<c:out value="${parsedInputName}"/>, false); // for FF
 				}
 				function receiver<c:out value="${parsedInputName}"/>(e) {
+					if (!isOriginAllowed<c:out value="${parsedInputName}"/>(e.origin)) {
+						return;
+					}
+					if (typeof e.data !== 'string') {
+						return;
+					}
 					// alert(e.origin + ": " + e.source + " said " + e.data);
 					if (e.data.substring(0,e.data.indexOf(":")) != 'mainForm.<c:out value="${inputName}"/>')
 					{
