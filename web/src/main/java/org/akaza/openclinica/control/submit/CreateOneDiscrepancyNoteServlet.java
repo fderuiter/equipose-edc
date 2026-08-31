@@ -95,13 +95,14 @@ public class CreateOneDiscrepancyNoteServlet extends SecureController {
     @Override
     protected void processRequest() throws Exception {
         FormProcessor fp = new FormProcessor(request);
-        DiscrepancyNoteDAO dndao = new DiscrepancyNoteDAO(sm.getDataSource());
+        org.akaza.openclinica.service.managestudy.DiscrepancyNoteService discrepancyNoteService =
+            (org.akaza.openclinica.service.managestudy.DiscrepancyNoteService) org.akaza.openclinica.control.SpringServletAccess.getApplicationContext(getServletContext()).getBean("discrepancyNoteService");
 
         int eventCRFId = fp.getInt(CreateDiscrepancyNoteServlet.EVENT_CRF_ID);
         request.setAttribute(CreateDiscrepancyNoteServlet.EVENT_CRF_ID, new Integer(eventCRFId));
         
         int parentId = fp.getInt(PARENT_ID);
-        DiscrepancyNoteBean parent = parentId > 0 ? (DiscrepancyNoteBean) dndao.findByPK(parentId) : new DiscrepancyNoteBean();
+        DiscrepancyNoteBean parent = parentId > 0 ? (DiscrepancyNoteBean) discrepancyNoteService.findByPK(parentId) : new DiscrepancyNoteBean();
         HashMap<Integer, DiscrepancyNoteBean> boxDNMap = (HashMap<Integer, DiscrepancyNoteBean>) session.getAttribute(BOX_DN_MAP);
         boxDNMap = boxDNMap == null ? new HashMap<Integer, DiscrepancyNoteBean>() : boxDNMap;
         DiscrepancyNoteBean dn =
@@ -179,7 +180,7 @@ public class CreateOneDiscrepancyNoteServlet extends SecureController {
             if(parentId > 0) {
                     if (dn.getResolutionStatusId() != parent.getResolutionStatusId()) {
                         parent.setResolutionStatusId(dn.getResolutionStatusId());
-                        dndao.update(parent);
+                        discrepancyNoteService.update(parent);
                         if(!parent.isActive()) {
                             logger.info("Failed to update resolution status ID for the parent dn ID = " + parentId + ". ");
                         }
@@ -187,9 +188,9 @@ public class CreateOneDiscrepancyNoteServlet extends SecureController {
                     if (dn.getAssignedUserId() != parent.getAssignedUserId()) {
                         parent.setAssignedUserId(dn.getAssignedUserId());
                         if(parent.getAssignedUserId()>0) {
-                            dndao.updateAssignedUser(parent);
+                            discrepancyNoteService.updateAssignedUser(parent);
                         } else {
-                            dndao.updateAssignedUserToNull(parent);
+                            discrepancyNoteService.updateAssignedUserToNull(parent);
                         }
                         if(!parent.isActive()) {
                             logger.info("Failed to update assigned user ID for the parent dn ID= " + parentId + ". ");
@@ -199,39 +200,13 @@ public class CreateOneDiscrepancyNoteServlet extends SecureController {
                 ypos = "0";
             }
 
-            dn = (DiscrepancyNoteBean)dndao.create(dn);
-            boolean success = dn.getId()>0 ? true : false;
+            dn = (DiscrepancyNoteBean) discrepancyNoteService.create(dn);
+            boolean success = dn != null && dn.getId() > 0;
             if(success) {
                 refresh = 1;
-                dndao.createMapping(dn);
-                success = dndao.isQuerySuccessful();
-                if(success == false) {
-                    mess.add(restext.getString("failed_create_dn_mapping_for_dnId") + dn.getId()+". ");
-                }
-                
-          
                 noteTree.addNote(eventCRFId+"_"+field, dn);
                 noteTree.addIdNote(dn.getEntityId(), field);
                 session.setAttribute(AddNewSubjectServlet.FORM_DISCREPANCY_NOTES_NAME, noteTree);
-                if (dn.getParentDnId() == 0) {
-                    // see issue 2659 this is a new thread, we will create
-                    // two notes in this case,
-                    // This way one can be the parent that updates as the
-                    // status changes, but one also stays as New.
-                    dn.setParentDnId(dn.getId());
-                    dn = (DiscrepancyNoteBean) dndao.create(dn);
-                    if(dn.getId()>0) {
-                        dndao.createMapping(dn);
-                        if(!dndao.isQuerySuccessful()) {
-                            mess.add(restext.getString("failed_create_dn_mapping_for_dnId")+dn.getId()+". ");
-                        }
-                        noteTree.addNote(eventCRFId+"_"+field, dn);
-                        noteTree.addIdNote(dn.getEntityId(), field);
-                        session.setAttribute(AddNewSubjectServlet.FORM_DISCREPANCY_NOTES_NAME, noteTree);
-                    } else {
-                        mess.add(restext.getString("failed_create_child_dn_for_new_parent_dnId")+dn.getId()+". ");
-                    }
-                }
             }else {
                 mess.add(restext.getString("failed_create_new_dn")+". ");
             }

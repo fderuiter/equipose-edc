@@ -36,7 +36,7 @@
 		<dbType>postgres</dbType>
 		<dbUser>clinica</dbUser>
 		<dbPass>clinica</dbPass>
-		<db>openclinica</db>
+		<db>clinica</db>
 		<dbPort>5432</dbPort>
 		<dbHost>localhost</dbHost>
 		<dbSchema>app_schema</dbSchema>
@@ -84,7 +84,7 @@
 				<dbType>postgres</dbType>
 				<dbUser>clinica</dbUser>
 				<dbPass>clinica</dbPass>
-				<db>openclinica</db>
+				<db>clinica</db>
 				<dbPort>5432</dbPort>
 				<dbHost>localhost</dbHost>
 				<dbSchema>app_schema</dbSchema>
@@ -96,7 +96,7 @@
 				<dbType>postgres</dbType>
 				<dbUser>clinica</dbUser>
 				<dbPass>clinica</dbPass>
-				<db>openclinica</db>
+				<db>clinica</db>
 				<dbPort>5432</dbPort>
 				<dbHost>dev-db-host</dbHost>
 				<dbSchema>app_schema</dbSchema>
@@ -108,7 +108,7 @@
 				<dbType>postgres</dbType>
 				<dbUser>clinica</dbUser>
 				<dbPass>clinica</dbPass>
-				<db>openclinica</db>
+				<db>clinica</db>
 				<dbPort>5432</dbPort>
 				<dbHost>qa-db-host</dbHost>
 				<dbSchema>app_schema</dbSchema>
@@ -120,7 +120,7 @@
 				<dbType>postgres</dbType>
 				<dbUser>clinica</dbUser>
 				<dbPass>${env.DB_PASS}</dbPass>
-				<db>openclinica</db>
+				<db>clinica</db>
 				<dbPort>5432</dbPort>
 				<dbHost>${env.DB_HOST}</dbHost>
 				<dbSchema>app_schema</dbSchema>

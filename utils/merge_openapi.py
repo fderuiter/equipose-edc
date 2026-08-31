@@ -1,7 +1,16 @@
 import json
-import yaml
 import os
 import sys
+import subprocess
+
+try:
+    import yaml
+except ImportError:
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml", "--quiet"])
+        import yaml
+    except Exception:
+        yaml = None
 
 def merge_specs():
     base_spec = {
@@ -29,6 +38,9 @@ def merge_specs():
             
         with open(spec_path, 'r', encoding='utf-8') as f:
             if spec_path.endswith('.yaml') or spec_path.endswith('.yml'):
+                if yaml is None:
+                    print(f"Warning: PyYAML is not installed. Skipping {spec_path}.")
+                    continue
                 spec = yaml.safe_load(f)
             else:
                 spec = json.load(f)
