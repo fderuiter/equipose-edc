@@ -133,11 +133,14 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                 if (claims != null && !claims.isEmpty()) {
                     if (hasStudyClaim(claims)) {
                         int requestedStudyId = getClaimAsInt(claims, -1, "active_study_id", "study_id", "study", "activeStudyId");
-                        if (requestedStudyId > 0 && !isStudyIdValid(requestedStudyId)) {
-                            logger.error("SECURITY ALERT: Invalid or unauthorized study context request: study_id=" + requestedStudyId + " for tenant " + org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant());
-                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                            response.getWriter().write("Access Denied: Invalid access context");
-                            return;
+                        if (requestedStudyId > 0) {
+                            if (!isStudyIdValid(requestedStudyId)) {
+                                logger.error("SECURITY ALERT: Invalid or unauthorized study context request: study_id=" + requestedStudyId + " for tenant " + org.akaza.openclinica.modern.security.TenantContext.getCurrentTenant());
+                                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                                response.getWriter().write("Access Denied: Invalid access context");
+                                return;
+                            }
+                            org.akaza.openclinica.modern.security.TenantContext.setCurrentStudy(requestedStudyId);
                         }
                     }
                 }
@@ -237,6 +240,7 @@ public class LegacyModernContextBridgeFilter extends OncePerRequestFilter {
                         session.setAttribute("userBean", userBean);
                         
                         if (userBean.getActiveStudyId() > 0) {
+                            org.akaza.openclinica.modern.security.TenantContext.setCurrentStudy(userBean.getActiveStudyId());
                             StudyBean studyBean = unifiedRepository.getStudyBean(userBean.getActiveStudyId());
                             if (studyBean != null && studyBean.getId() > 0) {
                                 session.setAttribute("studyBean", studyBean);

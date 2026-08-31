@@ -30,11 +30,15 @@ CREATE TABLE IF NOT EXISTS clinical_records (
 
 CREATE TABLE IF NOT EXISTS dde_records (
     id VARCHAR(255) PRIMARY KEY,
+    tenant_id VARCHAR(255),
+    study_id INT,
     subject_oid VARCHAR(255),
     item_oid VARCHAR(255),
     first_value VARCHAR(255),
     submission_count INT
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS dde_records_unique_idx ON dde_records (tenant_id, study_id, subject_oid, item_oid);
 
 CREATE TABLE IF NOT EXISTS configuration_drafts (
     id VARCHAR(36) PRIMARY KEY,
